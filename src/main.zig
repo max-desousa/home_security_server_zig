@@ -1,4 +1,5 @@
 const std = @import("std");
+const config = @import("config");
 
 pub fn main() !void {
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
@@ -15,10 +16,8 @@ pub fn main() !void {
     // get io instance.
     const io = threaded.io();
 
-    const server = try Server.init(io);
-    var listening = try server.listen();
-    const connection = try listening.accept(io);
-    defer connection.close(io);
+    try config.establish_config(io);
+    std.debug.print("Desired Host from config: {s}\n", .{config.get_desired_host()});
 }
 
 pub const Server = struct {

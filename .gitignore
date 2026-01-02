@@ -2,3 +2,4 @@
 /zig-out/**
 output.txt
 error.txt
+config.zap

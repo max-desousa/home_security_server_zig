@@ -4,10 +4,10 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    //const mod = b.addModule("home_security_server_zig", .{
-    //    .root_source_file = b.path("src/root.zig"),
-    //    .target = target,
-    //});
+    const mod_config = b.createModule(.{
+        .root_source_file = b.path("src/config/root_config.zig"),
+        .target = target,
+    });
 
     const exe = b.addExecutable(.{
         .name = "home_security_server_zig",
@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                //.{ .name = "home_security_server_zig", .module = mod },
+                .{ .name = "config", .module = mod_config },
             },
         }),
     });
