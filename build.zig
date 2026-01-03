@@ -7,6 +7,13 @@ pub fn build(b: *std.Build) void {
     const mod_config = b.createModule(.{
         .root_source_file = b.path("src/config/root_config.zig"),
         .target = target,
+        .optimize = optimize,
+    });
+
+    const mod_req = b.createModule(.{
+        .root_source_file = b.path("src/req/root_req.zig"),
+        .target = target,
+        .optimize = optimize,
     });
 
     const exe = b.addExecutable(.{
@@ -17,6 +24,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "config", .module = mod_config },
+                .{ .name = "requests", .module = mod_req },
             },
         }),
     });

@@ -1,5 +1,6 @@
 const std = @import("std");
 const config = @import("config");
+const requests = @import("requests");
 
 pub fn main() !void {
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
@@ -47,7 +48,15 @@ pub fn main() !void {
             continue;
         };
 
-        _ = io.async(handle_connection, .{io, stream, hello_world_data});
+        const nullable_read = try requests.get_request_msg(allocator, io, stream);
+        const read = nullable_read orelse {
+            std.debug.print("Request was not a GET\n", .{});
+            continue;
+        };
+        defer allocator.free(read);
+        std.debug.print("The requested page to get was: {s}\n", .{read});
+
+        //_ = io.async(handle_connection, .{io, stream, hello_world_data});
     }
 
 
