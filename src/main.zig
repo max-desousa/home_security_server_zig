@@ -56,6 +56,22 @@ pub fn main() !void {
 fn handle_connection(io : std.Io, stream : std.Io.net.Stream, data_to_write : []u8) void {
     defer stream.close(io);
 
+    var buffer_for_reader : [1024]u8 = std.mem.zeroes([1024]u8);
+    var stream_reader = stream.reader(io, &buffer_for_reader);
+
+    std.debug.print("Start of data from client...\n", .{});
+    //while (stream_reader.interface.takeDelimiterInclusive('\n')) |nullable_line| {
+    while (stream_reader.interface.takeDelimiterInclusive('\n')) |line| {
+        if (std.mem.eql(u8, line, "\r\n")) break;
+        std.debug.print("{s}", .{line});
+    } else |err| {
+        if (error.EndOfStream != err) {
+            std.debug.print("Error reading stream: {any}\n", .{err});
+        }
+    }
+    std.debug.print("End of data from client...\n", .{});
+
+
     var buffer_for_writer : [1024]u8 = std.mem.zeroes([1024]u8);
     var stream_writer = stream.writer(io, &buffer_for_writer);
     defer stream_writer.interface.flush() catch {};
