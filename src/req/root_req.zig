@@ -71,18 +71,37 @@ pub fn send404(io : std.Io, stream : *std.Io.net.Stream) void {
     _ = file_reader_full.getSize() catch {};
     std.debug.print("The value of reader end is: {d}\n", .{file_reader_full.size.?});
 
-    const header = 
+    var file_size_buffer : [16]u8 = std.mem.zeroes([16]u8);
+    const file_size_string = std.fmt.bufPrint(
+        &file_size_buffer, 
+        "{d}", .
+        {file_reader_full.size.?}
+    ) catch |err| {
+        std.debug.print("Error in getting 404 file size as string: {any}\n", .{err});
+        return;
+    };
+
+    const header_part_one = 
         "HTTP/1.1 404 Not Found\r\n" ++
         "Content-Type: text/html; charset=utf-8\r\n" ++
-        "Content-Length : 4301\r\n" ++
-        "\r\n";
-    stream_writer.writeAll(header) catch |err| {
-        std.debug.print("Error sending header for 404: {any}\n", .{err});
+        "Content-Length: ";
+    stream_writer.writeAll(header_part_one) catch |err| {
+        std.debug.print("Error sending header (part one) for 404: {any}\n", .{err});
+    };
+    stream_writer.writeAll(file_size_string) catch |err| {
+        std.debug.print("Error sending header (file size string) for 404: {any}\n", .{err});
+    };
+    const header_part_two = 
+        "\r\n" ++ //finishing the content length line
+        "\r\n";   //blank line to seperate content
+    stream_writer.writeAll(header_part_two) catch |err| {
+        std.debug.print("Error sending header (part two) for 404: {any}\n", .{err});
     };
 
     while (file_reader_full.pos < file_reader_full.size.?) {
         std.debug.print("writing bytes...\n", .{});
-        const bytes_to_read = ((file_reader_full.size.? - file_reader_full.pos) % 1024);
+        const bytes_remaining = file_reader_full.size.? - file_reader_full.pos;
+        const bytes_to_read = @min(1024, bytes_remaining);
         const bytes = file_reader.take(bytes_to_read) catch |err| {
             std.debug.print("Error reading 404 file: {any}\n", .{err});
             return;

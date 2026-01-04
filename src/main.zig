@@ -11,7 +11,7 @@ pub const Server = struct {
 
     pub fn init(io : std.Io) !Server {
         const host: []const u8 = "127.0.0.1";
-        const port: u16 = 3491;
+        const port: u16 = 3490;
         const addr = try std.Io.net.IpAddress.parseIp4(host, port);
 
         return .{ .host = host, .port = port, .addr = addr, .io = io };
