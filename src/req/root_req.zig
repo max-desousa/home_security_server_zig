@@ -49,6 +49,130 @@ fn get_request_msg(
 
 //##############################################################################
 //##############################################################################
+pub fn parse_and_serve_req_path(
+    allocator : std.mem.Allocator,
+    io : std.Io,
+    stream : *std.Io.net.Stream,
+) !void {
+    const nullable_req = get_request_msg(allocator, io, stream) catch |err| {
+        std.debug.print("Issue parsing request message: {any}", .{err});
+        return err;
+    };
+    const req = nullable_req orelse {
+        std.debug.print("Server only supports `GET` messages so far - hitting unimplemented logic\n", .{});
+        return error.NotAGetRequest;
+    };
+    defer allocator.free(req);
+
+    try serve_requested_path(io, req, stream);
+}
+
+
+//##############################################################################
+//##############################################################################
+pub fn serve_requested_path(io : std.Io, req : []u8, stream : *std.Io.net.Stream) !void {
+
+    if (std.mem.eql(u8, "/favicon.ico", req)) {
+        try serve_not_supported_content(io, stream);
+        return;
+    }
+    if (std.mem.eql(u8, "/", req)) {
+        std.debug.print("Home page redirect\n", .{});
+        var home_path_buffer : [32]u8 = std.mem.zeroes([32]u8);
+        const home_path = try std.fmt.bufPrint(&home_path_buffer, "/HelloWorld.html", .{});
+        try serve_requested_path(io, home_path, stream);
+        return;
+    }
+
+    var modified_path_buffer : [512]u8 = std.mem.zeroes([512]u8);
+    const modified_path = try std.fmt.bufPrint(&modified_path_buffer, "static{s}", .{req});
+
+    var file = std.Io.Dir.openFile(
+        std.Io.Dir.cwd(),
+        io,
+        modified_path,
+        .{},
+    ) catch |err| {
+        std.debug.print("Error finding path ({s}) in static directory\n", .{req});
+        std.debug.print("\tError code: {any}\n", .{err});
+        std.debug.print("\t(serving 404)\n", .{});
+        send404(io, stream);
+        return;
+    };
+    defer file.close(io);
+    try serve_successful_static_file(io, file, stream);
+}
+
+pub fn serve_not_supported_content(
+    io : std.Io,
+    stream : *std.Io.net.Stream,
+) !void {
+    const text_to_send = 
+        "HTTP/1.1 204 No Content\r\n" ++
+        "Content-Length: 0\r\n" ++
+        "Cache-Control: public, max-age=31536000, immutable\r\n" ++
+        "Connection: close\r\n" ++
+        "\r\n";
+
+    var buffer_for_stream : [256]u8 = std.mem.zeroes([256]u8);
+    var stream_writer_full = stream.writer(io, &buffer_for_stream);
+    defer stream_writer_full.interface.flush() catch {};
+
+    stream_writer_full.interface.writeAll(text_to_send) catch |err| {
+        std.debug.print("Issues writing to stream in `serve_not_supported_content`\n", .{});
+        return err;
+    };
+    stream_writer_full.interface.flush() catch |err| {
+        std.debug.print("Error flushing in `serve_not_supported_content`\n", .{});
+        return err;
+    };
+}
+
+//##############################################################################
+//##############################################################################
+pub fn serve_successful_static_file(
+    io : std.Io,
+    file : std.Io.File,
+    stream : *std.Io.net.Stream
+) !void {
+    const buffer_sizes : usize = 2056;
+    var buffer_for_file_reader : [buffer_sizes]u8 = std.mem.zeroes([buffer_sizes]u8);
+
+    var file_reader_full = file.reader(io, &buffer_for_file_reader);
+    var file_reader = &file_reader_full.interface;
+
+    const file_size = try file_reader_full.getSize();
+
+    var buffer_for_header : [4096]u8 = std.mem.zeroes([4096]u8);
+    const header = try std.fmt.bufPrint(
+        &buffer_for_header,
+        "HTTP/1.1 200 OK\r\n" ++
+        "Content-Type: text/html; charset=utf-8\r\n" ++
+        "Content-Length: {d}\r\n" ++
+        "Connection: close\r\n" ++
+        "\r\n",
+        .{file_size}
+    );
+
+    var buffer_for_stream_writer : [buffer_sizes]u8 = std.mem.zeroes([buffer_sizes]u8);
+    var stream_writer_full = stream.writer(io, &buffer_for_stream_writer);
+    defer stream_writer_full.interface.flush() catch {};
+    var stream_writer = &stream_writer_full.interface;
+
+    try stream_writer.writeAll(header);
+
+    while (file_reader_full.pos < file_size) {
+        const remaining_bytes = file_size - file_reader_full.pos;
+        const bytes_to_transfer = @min(buffer_sizes, remaining_bytes);
+        const bytes = try file_reader.take(bytes_to_transfer);
+        try stream_writer.writeAll(bytes);
+    }
+    try stream_writer_full.interface.flush();
+}
+
+
+//##############################################################################
+//##############################################################################
 pub fn send404(io : std.Io, stream : *std.Io.net.Stream) void {
     var buffer_for_stream_writer : [1024]u8 = std.mem.zeroes([1024]u8);
     var stream_writer_full = stream.writer(io, &buffer_for_stream_writer);

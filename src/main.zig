@@ -44,13 +44,20 @@ fn handle_connection(
 ) void {
     defer stream.close(io);
 
-    const page_served = requests.serve_page_if_requested(allocator, io, stream) catch |err| {
-        std.debug.print("There was an error addressing the stream: {any}\n", .{err});
+    requests.parse_and_serve_req_path(allocator, io, stream) catch |err| {
+        std.debug.print("Top level failure: {any}\n", .{err});
         return;
     };
-    if (page_served) return;
 
-    requests.send404(io, stream);
+    //##########################################################################
+    //const page_served = requests.serve_page_if_requested(allocator, io, stream) catch |err| {
+    //    std.debug.print("There was an error addressing the stream: {any}\n", .{err});
+    //    return;
+    //};
+    //if (page_served) return;
+
+    //requests.send404(io, stream);
+    //##########################################################################
 
     //const nullable_read = try requests.get_request_msg(allocator, io, stream);
     //const read = nullable_read orelse {
