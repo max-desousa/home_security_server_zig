@@ -3,3 +3,4 @@
 output.txt
 error.txt
 config.zap
+.grok/**
