@@ -2,109 +2,6 @@ const std = @import("std");
 const config = @import("config");
 const requests = @import("requests");
 
-pub fn main() !void {
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-
-    // Create allocator needed for multiple aspects of the program
-    var allocator_object : std.heap.DebugAllocator(.{}) = .init;
-    defer _ = allocator_object.deinit();
-    const allocator = allocator_object.allocator();
-
-    // Create threaded instance with multithreading support
-    var threaded : std.Io.Threaded = .init(allocator, .{});
-    defer threaded.deinit();
-
-    // get io instance.
-    const io = threaded.io();
-
-    // END BOILER PLATE
-
-    //Open Hello world file for reading. 
-    const source_file = try std.Io.Dir.openFile(
-        std.Io.Dir.cwd(),
-        io,
-        "static/HelloWorld.html",
-        .{}
-    );
-    defer source_file.close(io);
-
-    //Open and read hello world html into heap buffer.
-    var buffer_file_reader : [1024]u8 = std.mem.zeroes([1024]u8);
-    var file_reader_full = source_file.reader(io, &buffer_file_reader);
-    var file_reader = &file_reader_full.interface;
-    const hello_world_data = try file_reader.readAlloc(allocator, try source_file.length(io));
-    defer allocator.free(hello_world_data);
-
-    try config.establish_config(io);
-    std.debug.print("Desired Host from config: {s}\n", .{config.get_desired_host()});
-
-    const server_struct : Server = try .init(io);
-    var server = try server_struct.listen();
-    defer server.deinit(io);
-
-    while (true) {
-        const stream = server.accept(io) catch |err| {
-            std.debug.print("Accept failed: {any}\n", .{err});
-            continue;
-        };
-
-        const nullable_read = try requests.get_request_msg(allocator, io, stream);
-        const read = nullable_read orelse {
-            std.debug.print("Request was not a GET\n", .{});
-            continue;
-        };
-        defer allocator.free(read);
-        std.debug.print("The requested page to get was: {s}\n", .{read});
-
-        //_ = io.async(handle_connection, .{io, stream, hello_world_data});
-    }
-
-
-}
-
-fn handle_connection(io : std.Io, stream : std.Io.net.Stream, data_to_write : []u8) void {
-    defer stream.close(io);
-
-    var buffer_for_reader : [1024]u8 = std.mem.zeroes([1024]u8);
-    var stream_reader = stream.reader(io, &buffer_for_reader);
-
-    std.debug.print("Start of data from client...\n", .{});
-    //while (stream_reader.interface.takeDelimiterInclusive('\n')) |nullable_line| {
-    while (stream_reader.interface.takeDelimiterInclusive('\n')) |line| {
-        if (std.mem.eql(u8, line, "\r\n")) break;
-        std.debug.print("{s}", .{line});
-    } else |err| {
-        if (error.EndOfStream != err) {
-            std.debug.print("Error reading stream: {any}\n", .{err});
-        }
-    }
-    std.debug.print("End of data from client...\n", .{});
-
-
-    var buffer_for_writer : [1024]u8 = std.mem.zeroes([1024]u8);
-    var stream_writer = stream.writer(io, &buffer_for_writer);
-    defer stream_writer.interface.flush() catch {};
-
-    const response_header = 
-        "HTTP/1.1 200 OK\r\n" ++
-        "Content-Type: text/html; charset=UTF-8\r\n" ++
-        "Content-Length: 218\r\n" ++
-        "Connection: close\r\n" ++
-        "\r\n";
-
-    stream_writer.interface.writeAll(response_header) catch {
-        std.debug.print("Error writing response header\n", .{});
-        return;
-    };
-    stream_writer.interface.writeAll(data_to_write) catch {
-        std.debug.print("Error writing response\n", .{});
-        return;
-    };
-    stream_writer.interface.flush() catch {
-        std.debug.print("Error flushing header\n", .{});
-        return;
-    };
-}
 
 pub const Server = struct {
     host : []const u8,
@@ -131,3 +28,64 @@ pub const Server = struct {
         );
     }
 };
+
+
+//##############################################################################
+//
+// Function: 
+//
+// Description: 
+//
+//##############################################################################
+fn handle_connection(
+    allocator : std.mem.Allocator,
+    io : std.Io, 
+    stream : *std.Io.net.Stream, 
+) void {
+    defer stream.close(io);
+
+    requests.parse_and_serve_req_path(allocator, io, stream) catch |err| {
+        std.debug.print("Top level failure: {any}\n", .{err});
+        return;
+    };
+}
+
+
+//##############################################################################
+//
+// Function: main
+//
+// Description: 
+//
+//##############################################################################
+pub fn main() !void {
+    // Create allocator needed for multiple aspects of the program
+    var allocator_object : std.heap.DebugAllocator(.{}) = .init;
+    defer _ = allocator_object.deinit();
+    const allocator = allocator_object.allocator();
+
+    // Create threaded instance with multithreading support
+    var threaded : std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+
+    // get io instance.
+    const io = threaded.io();
+
+    // END BOILER PLATE
+
+    try config.establish_config(io);
+    std.debug.print("Desired Host from config: {s}\n", .{config.get_desired_host()});
+
+    const server_struct : Server = try .init(io);
+    var server = try server_struct.listen();
+    defer server.deinit(io);
+
+    while (true) {
+        var stream_to_transfer = server.accept(io) catch |err| {
+            std.debug.print("Accept failed: {any}\n", .{err});
+            continue;
+        };
+
+        _ = io.async(handle_connection, .{allocator, io, &stream_to_transfer});
+    }
+}
