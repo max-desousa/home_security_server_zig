@@ -48,64 +48,6 @@ fn handle_connection(
         std.debug.print("Top level failure: {any}\n", .{err});
         return;
     };
-
-    //##########################################################################
-    //const page_served = requests.serve_page_if_requested(allocator, io, stream) catch |err| {
-    //    std.debug.print("There was an error addressing the stream: {any}\n", .{err});
-    //    return;
-    //};
-    //if (page_served) return;
-
-    //requests.send404(io, stream);
-    //##########################################################################
-
-    //const nullable_read = try requests.get_request_msg(allocator, io, stream);
-    //const read = nullable_read orelse {
-    //    std.debug.print("Request was not a GET\n", .{});
-    //    continue;
-    //};
-    //defer allocator.free(read);
-
-
-    //var buffer_for_reader : [1024]u8 = std.mem.zeroes([1024]u8);
-    //var stream_reader = stream.reader(io, &buffer_for_reader);
-
-    //std.debug.print("Start of data from client...\n", .{});
-    ////while (stream_reader.interface.takeDelimiterInclusive('\n')) |nullable_line| {
-    //while (stream_reader.interface.takeDelimiterInclusive('\n')) |line| {
-    //    if (std.mem.eql(u8, line, "\r\n")) break;
-    //    std.debug.print("{s}", .{line});
-    //} else |err| {
-    //    if (error.EndOfStream != err) {
-    //        std.debug.print("Error reading stream: {any}\n", .{err});
-    //    }
-    //}
-    //std.debug.print("End of data from client...\n", .{});
-
-
-    //var buffer_for_writer : [1024]u8 = std.mem.zeroes([1024]u8);
-    //var stream_writer = stream.writer(io, &buffer_for_writer);
-    //defer stream_writer.interface.flush() catch {};
-
-    //const response_header = 
-    //    "HTTP/1.1 200 OK\r\n" ++
-    //    "Content-Type: text/html; charset=UTF-8\r\n" ++
-    //    "Content-Length: 218\r\n" ++
-    //    "Connection: close\r\n" ++
-    //    "\r\n";
-
-    //stream_writer.interface.writeAll(response_header) catch {
-    //    std.debug.print("Error writing response header\n", .{});
-    //    return;
-    //};
-    //stream_writer.interface.writeAll(data_to_write) catch {
-    //    std.debug.print("Error writing response\n", .{});
-    //    return;
-    //};
-    //stream_writer.interface.flush() catch {
-    //    std.debug.print("Error flushing header\n", .{});
-    //    return;
-    //};
 }
 
 

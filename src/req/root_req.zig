@@ -64,6 +64,13 @@ pub fn parse_and_serve_req_path(
     };
     defer allocator.free(req);
 
+    std.debug.print("Assessing request: {s}\n", .{req});
+
+    const hard_coded_path : bool = try serve_hard_coded_request(io, req, stream);
+    if (hard_coded_path) {
+        return;
+    }
+
     try serve_requested_path(io, req, stream);
 }
 
@@ -71,19 +78,6 @@ pub fn parse_and_serve_req_path(
 //##############################################################################
 //##############################################################################
 pub fn serve_requested_path(io : std.Io, req : []u8, stream : *std.Io.net.Stream) !void {
-
-    if (std.mem.eql(u8, "/favicon.ico", req)) {
-        try serve_not_supported_content(io, stream);
-        return;
-    }
-    if (std.mem.eql(u8, "/", req)) {
-        std.debug.print("Home page redirect\n", .{});
-        var home_path_buffer : [32]u8 = std.mem.zeroes([32]u8);
-        const home_path = try std.fmt.bufPrint(&home_path_buffer, "/HelloWorld.html", .{});
-        try serve_requested_path(io, home_path, stream);
-        return;
-    }
-
     var modified_path_buffer : [512]u8 = std.mem.zeroes([512]u8);
     const modified_path = try std.fmt.bufPrint(&modified_path_buffer, "static{s}", .{req});
 
@@ -239,4 +233,33 @@ pub fn send404(io : std.Io, stream : *std.Io.net.Stream) void {
     stream_writer.flush() catch |err| {
         std.debug.print("Error flushing 404 stream: {any}\n", .{err});
     };
+}
+
+
+//##############################################################################
+//
+//##############################################################################
+fn serve_hard_coded_request(
+    io : std.Io, 
+    req : []u8, 
+    stream : *std.Io.net.Stream
+) !bool {
+
+    std.debug.print("Entered hard coded function...\n", .{});
+
+    if (std.mem.eql(u8, "/favicon.ico", req)) {
+        try serve_not_supported_content(io, stream);
+        return true;
+    }
+
+    if (std.mem.eql(u8, "/", req)) {
+        std.debug.print("Home page redirect\n", .{});
+        var home_path_buffer : [32]u8 = std.mem.zeroes([32]u8);
+        const home_path = try std.fmt.bufPrint(&home_path_buffer, "/HelloWorld.html", .{});
+        try serve_requested_path(io, home_path, stream);
+        return true;
+    }
+    std.debug.print("i didn't expect to hit this...\n", .{});
+
+    return false;
 }
