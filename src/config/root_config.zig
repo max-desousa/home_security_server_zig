@@ -10,12 +10,15 @@ const CONFIG_FILE_NAME = "config.zap";
 // in the varios references in parsing/writing leading to runtime errors
 
 const FIELD_DESIRED_HOST = "[ requested host address ]";
+const FIELD_DESIRED_PORT = "[ requested port ]";
 
 //##############################################################################
 
 // Backing values of the fields in the config file
 var BUFFER_FOR_VALUE_DESIRED_HOST : [256]u8 = undefined;
 var VALUE_DESIRED_HOST: []const u8 = BUFFER_FOR_VALUE_DESIRED_HOST[0..0];
+
+var VALUE_DESIRED_PORT : u16 = undefined;
 
 //##############################################################################
 
@@ -24,6 +27,10 @@ var VALUE_DESIRED_HOST: []const u8 = BUFFER_FOR_VALUE_DESIRED_HOST[0..0];
 
 pub fn get_desired_host() []const u8 {
     return VALUE_DESIRED_HOST;
+}
+
+pub fn get_desired_port() u16 {
+    return VALUE_DESIRED_PORT;
 }
 
 //##############################################################################
@@ -50,6 +57,12 @@ fn parse_file(io : std.Io, file : std.Io.File) !void {
         if (std.mem.eql(u8, before, FIELD_DESIRED_HOST)) {
             @memmove(BUFFER_FOR_VALUE_DESIRED_HOST[0..after.len], after);
             VALUE_DESIRED_HOST = BUFFER_FOR_VALUE_DESIRED_HOST[0..after.len];
+        }
+        else if (std.mem.eql(u8, before, FIELD_DESIRED_PORT)) {
+            VALUE_DESIRED_PORT = try std.fmt.parseInt(u16, after, 10);
+        }
+        else {
+            unreachable;
         }
     } else |err| {
         std.debug.print("Error reading file: {any}\n", .{err});
@@ -78,6 +91,9 @@ fn make_default_config(io : std.Io) !void {
     @memmove(BUFFER_FOR_VALUE_DESIRED_HOST[0..localhost.len], localhost);
     VALUE_DESIRED_HOST = BUFFER_FOR_VALUE_DESIRED_HOST[0..localhost.len];
     try writer.print("{s} = {s}\n", .{FIELD_DESIRED_HOST, VALUE_DESIRED_HOST});
+
+    VALUE_DESIRED_PORT = 3490;
+    try writer.print("{s} = {d}\n", .{FIELD_DESIRED_PORT, VALUE_DESIRED_PORT});
     
     try file_writer.end();
 }

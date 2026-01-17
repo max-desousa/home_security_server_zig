@@ -2,6 +2,8 @@ const std = @import("std");
 const config = @import("config");
 const requests = @import("requests");
 
+var running : bool = true;
+const MAX_CONNECTION_THREAD_COUNT = 4;
 
 pub const Server = struct {
     host : []const u8,
@@ -10,8 +12,8 @@ pub const Server = struct {
     io : std.Io,
 
     pub fn init(io : std.Io) !Server {
-        const host: []const u8 = "127.0.0.1";
-        const port: u16 = 3490;
+        const host: []const u8 = config.get_desired_host();
+        const port: u16 = config.get_desired_port();
         const addr = try std.Io.net.IpAddress.parseIp4(host, port);
 
         return .{ .host = host, .port = port, .addr = addr, .io = io };
@@ -50,6 +52,11 @@ fn handle_connection(
     };
 }
 
+fn interrupt_handler(sig: std.c.SIG) callconv(.c) void {
+    _ = sig;
+    std.debug.print("In custom sig handler...\n", .{});
+    running = false;
+}
 
 //##############################################################################
 //
@@ -59,6 +66,15 @@ fn handle_connection(
 //
 //##############################################################################
 pub fn main() !void {
+
+    // Set up SIGINT handler for graceful closing
+    var action : std.posix.Sigaction = .{
+        .handler = .{ .handler = interrupt_handler },
+        .mask = std.posix.sigemptyset(),
+        .flags = 0,
+    };
+    std.posix.sigaction(.INT, &action, null);
+
     // Create allocator needed for multiple aspects of the program
     var allocator_object : std.heap.DebugAllocator(.{}) = .init;
     defer _ = allocator_object.deinit();
@@ -80,12 +96,58 @@ pub fn main() !void {
     var server = try server_struct.listen();
     defer server.deinit(io);
 
+    var threads_to_close : std.ArrayList(std.Io.Future(void)) = try .initCapacity(allocator, MAX_CONNECTION_THREAD_COUNT);
+
+    for (0..MAX_CONNECTION_THREAD_COUNT) |i| {
+        const task = try io.concurrent(multi_threaded_handler, .{allocator, io, &server, @intCast(i)});
+        try threads_to_close.append(allocator, task);
+    }
+    defer {
+        for (threads_to_close.items, 0..) |*future, i| {
+            std.debug.print("Cancelling thread: {d}\n", .{i});
+            future.cancel(io);
+        }
+        std.debug.print("Deiniting arraylist...\n", .{});
+        threads_to_close.deinit(allocator);
+    }
+
+    //while (running) {
+    //    std.debug.print("Server is: {any}\n", .{running});
+    //    var stream_to_transfer = server.accept(io) catch |err| {
+    //        std.debug.print("Accept failed: {any}\n", .{err});
+    //        return err;
+    //        continue;
+    //    };
+
+    //    var task = io.concurrent(handle_connection, .{allocator, io, &stream_to_transfer});
+    //    defer task.cancel(io);
+    //}
+
+    while (running) {
+    }
+}
+
+fn multi_threaded_handler(
+    allocator : std.mem.Allocator,
+    io : std.Io,
+    server : *std.Io.net.Server,
+    thread_num : u8,
+) void {
+    _ = &allocator;
+    _ = &io;
+    _ = &server;
+    std.debug.print("Thread {d} started...\n", .{thread_num});
     while (true) {
         var stream_to_transfer = server.accept(io) catch |err| {
+            if (std.Io.Cancelable.Canceled == err) {
+                std.debug.print("Cancellation error received at thread: {d}\n", .{thread_num});
+                return;
+            }
             std.debug.print("Accept failed: {any}\n", .{err});
             continue;
         };
-
-        _ = io.async(handle_connection, .{allocator, io, &stream_to_transfer});
+        std.debug.print("Connection handled by thread: {d}...\n", .{thread_num});
+        _ = &stream_to_transfer;
+        //std.Io.checkCancel(io) catch return;
     }
 }
