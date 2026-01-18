@@ -1,6 +1,7 @@
 const std = @import("std");
 const config = @import("config");
 const requests = @import("requests");
+const serve = @import("serve");
 
 var running : bool = true;
 const MAX_CONNECTION_THREAD_COUNT = 4;
@@ -96,7 +97,7 @@ pub fn main() !void {
     var server = try server_struct.listen();
     defer server.deinit(io);
 
-    var threads_to_close : std.ArrayList(std.Io.Future(void)) = try .initCapacity(allocator, MAX_CONNECTION_THREAD_COUNT);
+    var threads_to_close : std.ArrayList(std.Io.Future(anyerror!void)) = try .initCapacity(allocator, MAX_CONNECTION_THREAD_COUNT);
 
     for (0..MAX_CONNECTION_THREAD_COUNT) |i| {
         const task = try io.concurrent(multi_threaded_handler, .{allocator, io, &server, @intCast(i)});
@@ -105,7 +106,7 @@ pub fn main() !void {
     defer {
         for (threads_to_close.items, 0..) |*future, i| {
             std.debug.print("Cancelling thread: {d}\n", .{i});
-            future.cancel(io);
+            _ = future.cancel(io) catch {};
         }
         std.debug.print("Deiniting arraylist...\n", .{});
         threads_to_close.deinit(allocator);
@@ -132,22 +133,29 @@ fn multi_threaded_handler(
     io : std.Io,
     server : *std.Io.net.Server,
     thread_num : u8,
-) void {
+) anyerror!void {
     _ = &allocator;
     _ = &io;
-    _ = &server;
     std.debug.print("Thread {d} started...\n", .{thread_num});
     while (true) {
-        var stream_to_transfer = server.accept(io) catch |err| {
+        //Perhaps use this to make sure the thread is canceled on request?
+        //std.Io.checkCancel(io) catch return;
+        var stream_to_transfer= server.accept(io) catch |err| {
             if (std.Io.Cancelable.Canceled == err) {
                 std.debug.print("Cancellation error received at thread: {d}\n", .{thread_num});
-                return;
+                return err;
             }
             std.debug.print("Accept failed: {any}\n", .{err});
             continue;
         };
         std.debug.print("Connection handled by thread: {d}...\n", .{thread_num});
-        _ = &stream_to_transfer;
-        //std.Io.checkCancel(io) catch return;
+        serve.server_main(allocator, io, &stream_to_transfer) catch |err| {
+            if (std.Io.Cancelable.Canceled == err) {
+                std.debug.print("Cancellation error received at thread: {d}\n", .{thread_num});
+                return err;
+            }
+            std.debug.print("Accept failed: {any}\n", .{err});
+            continue;
+        };
     }
 }

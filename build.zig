@@ -4,14 +4,23 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const mod_config = b.createModule(.{
-        .root_source_file = b.path("src/config/root_config.zig"),
+    const mod_req = b.createModule(.{
+        .root_source_file = b.path("src/req/root_req.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    const mod_req = b.createModule(.{
-        .root_source_file = b.path("src/req/root_req.zig"),
+    const mod_serve = b.createModule(.{
+        .root_source_file = b.path("src/serve/root_serve.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "request", .module = mod_req },
+        }
+    });
+
+    const mod_config = b.createModule(.{
+        .root_source_file = b.path("src/config/root_config.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -25,6 +34,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "config", .module = mod_config },
                 .{ .name = "requests", .module = mod_req },
+                .{ .name = "serve", .module = mod_serve },
             },
         }),
     });
