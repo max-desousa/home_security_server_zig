@@ -2,8 +2,11 @@ const std = @import("std");
 
 //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
 
-type : RequestType,
-dest : ?[]const u8 = null,
+method : RequestType,
+req_uri : []const u8,
+http_version : []const u8,
+
+stream_reader : ?*std.Io.net.Stream.Reader = null,
 
 // Base things to keep (some just to simplify zig argument lists)
 allocator : std.mem.Allocator,
@@ -26,15 +29,53 @@ pub fn init(
     stream : *std.Io.net.Stream
 ) !Self {
 
+    var buffer_for_stream_reader : [4096]u8 = std.mem.zeroes([4096]u8);
+    var stream_reader = stream.reader(io, &buffer_for_stream_reader);
+
+    const method, const uri, const http_version = blk: {
+        const nullable_first_line = try stream_reader.interface.takeDelimiter('\n');
+        const first_line = nullable_first_line orelse return error.ParsingFirstLine0;
+        const nullable_first_cut = std.mem.cut(u8, first_line, " ");
+        const first_cut = nullable_first_cut orelse return error.ParsingFirstLineFirstCut;
+        const nullable_second_cut = std.mem.cut(u8, first_cut.@"1", " ");
+        const second_cut = nullable_second_cut orelse return error.ParsingFirstLineSecondCut;
+
+        const allocated_method = try std.fmt.allocPrint(allocator, "{s}", .{first_cut.@"0"} );
+        errdefer allocator.free(allocated_method);
+
+        const allocated_uri = try std.fmt.allocPrint(allocator, "{s}", .{second_cut.@"0"});
+        errdefer allocator.free(allocated_uri);
+
+        const allocated_version = try std.fmt.allocPrint(allocator, "{s}", .{second_cut.@"1"});
+        errdefer allocator.free(allocated_version);
+
+        break :blk .{
+            allocated_method,
+            allocated_uri,
+            allocated_version,
+        };
+    };
+
+    std.debug.print("Parsed values...\nMethod: {s}\nUri: {s}\nVersion: {s}\n", .{
+        method,
+        uri,
+        http_version,
+    });
+
+
     const req_type = try determine_type_of_req(io, stream);
     var return_obj : Self = .{
-        .type = req_type,
+        .method = req_type,
+        .req_uri = uri,
+        .http_version = http_version,
         .allocator = allocator,
         .io = io,
         .stream = stream,
     };
 
-    try return_obj.determine_dest_of_req();
+    return_obj.determine_dest_of_req() catch |err| {
+        std.debug.print("Error determining dest: {any}\n", .{err});
+    };
 
     return return_obj;
 }
@@ -73,7 +114,7 @@ fn determine_type_of_req(
 }
 
 fn determine_dest_of_req(req : *Self) !void {
-    if (null == req.dest) {
+    if (null != req.dest) {
         return;
     }
 
@@ -86,6 +127,7 @@ fn determine_dest_of_req(req : *Self) !void {
     const first_cut = nullable_first_cut orelse return error.BadRequestFromClient;
     const dest = first_cut.@"1";
 
+    std.debug.print("Request-URI: {s}\n", .{dest});
     req.dest = try std.fmt.allocPrint(req.allocator, "{s}", .{dest});
 }
 

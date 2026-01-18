@@ -20,7 +20,7 @@ fn discard_favicon_requests(
     var stream_reader = req.*.stream.*.reader(req.*.io, &buffer_for_stream_reader);
     std.debug.print("Sanity check 3...\n", .{});
 
-    const first_line = try stream_reader.interface.peekDelimiterExclusive('\r');
+    const first_line = try stream_reader.interface.peekDelimiterExclusive('\n');
     std.debug.print("Sanity check 4...\n", .{});
     if (std.mem.eql(u8, first_line, "GET /favicon.ico")) {
         return error.IgnoreFavicon;
