@@ -21,8 +21,9 @@ pub fn server_main(
     //try middleware.all(stream);
     middleware(&req) catch |err| {
         std.debug.print("Middleware is failing with error: {any}\n", .{err});
+        return;
     };
-    switch (req.type) {
+    switch (req.method) {
         .POST => try post_handler(stream),
         .GET => try get_handler(&req),
         else => try send_404(stream),

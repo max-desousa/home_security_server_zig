@@ -103,6 +103,7 @@ pub fn main() !void {
         const task = try io.concurrent(multi_threaded_handler, .{allocator, io, &server, @intCast(i)});
         try threads_to_close.append(allocator, task);
     }
+
     defer {
         for (threads_to_close.items, 0..) |*future, i| {
             std.debug.print("Cancelling thread: {d}\n", .{i});
@@ -111,18 +112,6 @@ pub fn main() !void {
         std.debug.print("Deiniting arraylist...\n", .{});
         threads_to_close.deinit(allocator);
     }
-
-    //while (running) {
-    //    std.debug.print("Server is: {any}\n", .{running});
-    //    var stream_to_transfer = server.accept(io) catch |err| {
-    //        std.debug.print("Accept failed: {any}\n", .{err});
-    //        return err;
-    //        continue;
-    //    };
-
-    //    var task = io.concurrent(handle_connection, .{allocator, io, &stream_to_transfer});
-    //    defer task.cancel(io);
-    //}
 
     while (running) {
     }
@@ -134,8 +123,6 @@ fn multi_threaded_handler(
     server : *std.Io.net.Server,
     thread_num : u8,
 ) anyerror!void {
-    _ = &allocator;
-    _ = &io;
     std.debug.print("Thread {d} started...\n", .{thread_num});
     while (true) {
         //Perhaps use this to make sure the thread is canceled on request?
@@ -157,5 +144,6 @@ fn multi_threaded_handler(
             std.debug.print("Accept failed: {any}\n", .{err});
             continue;
         };
+        std.debug.print("Request finished for thread: {d}\n", .{thread_num});
     }
 }
