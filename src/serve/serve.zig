@@ -1,5 +1,6 @@
 const std = @import("std");
 const Request = @import("request");
+const resources = @import("resources");
 
 pub fn send_home_page(req : *Request) !void {
     var file = std.Io.Dir.openFile(
@@ -83,13 +84,40 @@ pub fn send204(req : *Request) !void {
     std.debug.print("---Sent 204---\n", .{});
 }
 
-//pub fn send404(req : *Request) !void {
-//
-//    var nullable_file = try find_static_file(req.io, "404");
-//    var file = nullable_file orelse blk: {
-//        try send_basic_404();
-//        return;
-//    };
-//
-//    try serve_successful_static_file(req.io, file req.stream);
-//}
+pub fn send404(req : *Request) !void {
+
+    // First let's see if we have a desired/pretty 404 page we want to show.
+    const nullable_file = try resources.open_static_html(req.io, "404");
+
+    if (nullable_file) |file| {
+        defer file.close(req.io);
+        try serve_successful_static_file(req.io, file, req.stream);
+    } else {
+        // No pretty 404 - send the basic one. 
+        try send_basic_404(req);
+    }
+}
+
+fn send_basic_404(req : *Request) !void {
+    const buffer_sizes : usize = 2056;
+    var basic_404_text_buffer : [buffer_sizes]u8 = std.mem.zeroes([buffer_sizes]u8);
+    const basic_404_text = try std.fmt.bufPrint(
+        &basic_404_text_buffer,
+        "HTTP/1.1 404 Not Found\r\n" ++
+        "Content-Type: text/html; charset=utf-8\r\n" ++
+        "Content-Length: 91\r\n" ++
+        "\r\n" ++
+        "<!DOCTYPE html><title>404</title><h1>404 Not Found</h1>",
+        .{},
+    );
+
+    var buffer_for_message : [buffer_sizes]u8 = std.mem.zeroes([buffer_sizes]u8);
+    var stream_writer_full = req.stream.writer(req.io, &buffer_for_message);
+    defer stream_writer_full.interface.flush() catch {};
+    var stream_writer = &stream_writer_full.interface;
+
+    try stream_writer.writeAll(basic_404_text);
+
+    try stream_writer_full.interface.flush();
+    std.debug.print("--- Sent minimal 404 ---\n", .{});
+}

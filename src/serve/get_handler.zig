@@ -1,14 +1,19 @@
 const std = @import("std");
 const Request = @import("request");
 const serve = @import("serve.zig");
+const resources = @import("resources");
 
 pub fn run(req : *Request) !void {
     std.debug.print("We're in the get handler...\n", .{});
     std.debug.print("We are in the get handler, handling a GET of \"{s}\"\n", .{req.req_uri});
     const nullable_file = try determine_if_requesting_static_html(req);
-    var file = nullable_file orelse unreachable;
-    defer file.close(req.io);
-    try serve.serve_successful_static_file(req.io, file, req.stream);
+    if (nullable_file) |file| {
+        defer file.close(req.io);
+        try serve.serve_successful_static_file(req.io, file, req.stream);
+    }
+    else {
+        try serve.send404(req);
+    }
 }
 
 fn determine_if_requesting_static_html(req : *Request) !?std.Io.File {

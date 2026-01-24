@@ -10,12 +10,22 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const mod_resources = b.createModule(.{
+        .root_source_file = b.path("src/resources/root_resources.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "resources", .module = mod_req },
+        },
+    });
+
     const mod_serve = b.createModule(.{
         .root_source_file = b.path("src/serve/root_serve.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
             .{ .name = "request", .module = mod_req },
+            .{ .name = "resources" , .module = mod_resources },
         }
     });
 

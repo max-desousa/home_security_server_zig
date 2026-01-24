@@ -26,10 +26,10 @@ pub fn server_main(
     switch (req.method) {
         .POST => try post_handler(stream),
         .GET => try get_handler(&req),
-        else => try send_404(stream),
+        else => try send_404(&req),
     }
 }
 
-fn send_404(stream : *std.Io.net.Stream) !void {
-    _ = &stream;
+fn send_404(req : *Request) !void {
+    _ = &req;
 }
