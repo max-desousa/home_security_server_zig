@@ -15,7 +15,11 @@ pub fn server_main(
     io : std.Io,
     stream : *std.Io.net.Stream
 ) !void {
-    var req = try Request.init(allocator, io, stream);
+    //var req = try Request.init(allocator, io, stream);
+    var req = Request.init(allocator, io, stream) catch |err| {
+        std.debug.print("Server main had error while parsing request: {any}\n", .{ err });
+        return err;
+    };
     defer req.deinit() catch {};
 
     //try middleware.all(stream);

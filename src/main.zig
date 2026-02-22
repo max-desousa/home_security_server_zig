@@ -69,9 +69,10 @@ fn interrupt_handler(sig: std.c.SIG) callconv(.c) void {
 pub fn main() !void {
 
     // Set up SIGINT handler for graceful closing
-    var action : std.posix.Sigaction = .{
+    var s : std.c.sigset_t = undefined;
+    var action : std.c.Sigaction = .{
         .handler = .{ .handler = interrupt_handler },
-        .mask = std.posix.sigemptyset(),
+        .mask = std.c.sigemptyset(&s),
         .flags = 0,
     };
     std.posix.sigaction(.INT, &action, null);
@@ -82,7 +83,7 @@ pub fn main() !void {
     const allocator = allocator_object.allocator();
 
     // Create threaded instance with multithreading support
-    var threaded : std.Io.Threaded = .init(allocator, .{});
+    var threaded : std.Io.Threaded = .init(allocator, .{ .environ = .empty });
     defer threaded.deinit();
 
     // get io instance.

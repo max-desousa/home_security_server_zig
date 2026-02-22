@@ -44,7 +44,7 @@ pub fn init(
             if (std.mem.eql(u8, "GET", first_cut.@"0")) {
                 break :meth .GET;
             }
-            else if (std.mem.eql(u8, "GET", first_cut.@"0")) {
+            else if (std.mem.eql(u8, "POST", first_cut.@"0")) {
                 break :meth .POST;
             }
             else break :meth .INVALID;
