@@ -68,14 +68,15 @@ fn interrupt_handler(sig: std.c.SIG) callconv(.c) void {
 //##############################################################################
 pub fn main() !void {
 
-    // Set up SIGINT handler for graceful closing
-    var s : std.c.sigset_t = undefined;
-    var action : std.c.Sigaction = .{
-        .handler = .{ .handler = interrupt_handler },
-        .mask = std.c.sigemptyset(&s),
-        .flags = 0,
-    };
-    std.posix.sigaction(.INT, &action, null);
+    //// Set up SIGINT handler for graceful closing
+    ////var s : std.c.sigset_t = std.mem.zeroes([16]c_ulong);
+    //const s : ?*std.c.sigset_t = null;
+    //var action : std.c.Sigaction = .{
+    //    .handler = .{ .handler = interrupt_handler },
+    //    .mask = std.c.sigemptyset(s),
+    //    .flags = 0,
+    //};
+    //std.posix.sigaction(.INT, &action, null);
 
     // Create allocator needed for multiple aspects of the program
     var allocator_object : std.heap.DebugAllocator(.{}) = .init;
@@ -118,6 +119,8 @@ pub fn main() !void {
     }
 }
 
+const BUFF_SIZE : usize = 4096;
+
 fn multi_threaded_handler(
     allocator : std.mem.Allocator,
     io : std.Io,
@@ -128,7 +131,7 @@ fn multi_threaded_handler(
     while (true) {
         //Perhaps use this to make sure the thread is canceled on request?
         //std.Io.checkCancel(io) catch return;
-        var stream_to_transfer= server.accept(io) catch |err| {
+        var stream_to_transfer = server.accept(io) catch |err| {
             if (std.Io.Cancelable.Canceled == err) {
                 std.debug.print("Cancellation error received at thread: {d}\n", .{thread_num});
                 return err;
@@ -136,15 +139,36 @@ fn multi_threaded_handler(
             std.debug.print("Accept failed: {any}\n", .{err});
             continue;
         };
+        defer stream_to_transfer.close(io);
         std.debug.print("Connection handled by thread: {d}...\n", .{thread_num});
-        serve.server_main(allocator, io, &stream_to_transfer) catch |err| {
-            if (std.Io.Cancelable.Canceled == err) {
-                std.debug.print("Cancellation error received at thread: {d}\n", .{thread_num});
-                return err;
-            }
-            std.debug.print("Accept failed: {any}\n", .{err});
-            continue;
-        };
-        std.debug.print("Request finished for thread: {d}\n", .{thread_num});
+
+        var buffer_stream_writer : [BUFF_SIZE]u8 = undefined;
+        var buffer_stream_reader : [BUFF_SIZE]u8 = undefined;
+
+        var stream_reader = stream_to_transfer.reader(io, &buffer_stream_reader);
+        var stream_writer = stream_to_transfer.writer(io, &buffer_stream_writer);
+
+        var http_server : std.http.Server = .init(&stream_reader.interface, &stream_writer.interface);
+
+        _ = &allocator;
+        const http_request = try http_server.receiveHead();
+        std.debug.print("HTTP metod received = {any}\n", .{ http_request.head.method });
+        std.debug.print("HTTP version received = {any}\n", .{ http_request.head.version });
+        if (http_request.head.content_length) |length| {
+            std.debug.print("Length found of: {d}...\n", .{length});
+        }
+        else {
+            std.debug.print("No (null) length found...\n", .{});
+        }
+
+        //serve.server_main(allocator, io, &stream_to_transfer) catch |err| {
+        //    if (std.Io.Cancelable.Canceled == err) {
+        //        std.debug.print("Cancellation error received at thread: {d}\n", .{thread_num});
+        //        return err;
+        //    }
+        //    std.debug.print("Accept failed: {any}\n", .{err});
+        //    continue;
+        //};
+        //std.debug.print("Request finished for thread: {d}\n", .{thread_num});
     }
 }
