@@ -1,8 +1,18 @@
 const std = @import("std");
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    const calculated_cpu_count = std.Thread.getCpuCount() catch 3;
+    const option_max_threads = b.option(usize, "max_threads", "Set the maximum number of threads for concurrency (min = 3)") orelse calculated_cpu_count;
+
+    if (3 > option_max_threads) {
+        return error.ThreadCountTooLow;
+    }
+
+    const options = b.addOptions();
+    options.addOption(usize, "max_threads", option_max_threads);
 
     const mod_req = b.createModule(.{
         .root_source_file = b.path("src/req/root_req.zig"),
@@ -49,6 +59,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    exe.root_module.addOptions("options", options);
     exe.root_module.link_libc = true;
 
     b.installArtifact(exe);
