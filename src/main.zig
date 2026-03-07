@@ -7,6 +7,7 @@ const options = @import("options");
 var running : bool = true;
 const MAX_THREAD_COUNT = options.max_threads;
 const MAX_PARSING_THEADS = MAX_THREAD_COUNT - 2;
+const STREAM_BUFF_SIZE : usize = 4096;
 
 pub const Server = struct {
     host : []const u8,
@@ -142,7 +143,6 @@ pub fn main() !void {
     }
 }
 
-const BUFF_SIZE : usize = 4096;
 
 fn accept_thread(
     io : std.Io, 
@@ -182,11 +182,22 @@ fn multi_threaded_handler(
             std.debug.print("Cancelling accept thread due to top level cancellation\n", .{});
             return;
         };
-        //
         //Handle acceptance of a stream.
         if (queue.getOne(io)) |stream| {
-            _ = &stream;
             std.debug.print("Processing new stream on thread {d}\n", .{ thread_num });
+            var buffer_stream_writer : [STREAM_BUFF_SIZE]u8 = undefined;
+            var buffer_stream_reader : [STREAM_BUFF_SIZE]u8 = undefined;
+
+            var stream_reader = stream.reader(io, &buffer_stream_reader);
+            var stream_writer = stream.writer(io, &buffer_stream_writer);
+
+            var http_server : std.http.Server = .init(&stream_reader.interface, &stream_writer.interface);
+            var http_request = http_server.receiveHead() catch |err| {
+                std.debug.print("Error processing http_request in parsing thread: {any}\n", .{ err });
+                continue;
+            };
+
+            print_http_req_header(&http_request.head);
         }
         else |_| {
             std.debug.print("Aborting parsing thead {d} at de-queueing due to cancellation...\n", .{ thread_num });
@@ -236,4 +247,41 @@ fn multi_threaded_handler(
     //    //};
     //    //std.debug.print("Request finished for thread: {d}\n", .{thread_num});
     //}
+}
+
+
+fn print_http_req_header(
+    req : *std.http.Server.Request.Head,
+) void {
+    std.debug.print("\tMethod: {any}\n", .{ req.method });
+    std.debug.print("\tTarget: {s}\n", .{ req.target });
+    std.debug.print("\tVersion: {any}\n", .{ req.version });
+
+    std.debug.print("\tExpect: ", .{});
+    if (req.expect) |expect| {
+        std.debug.print("{s}\n", .{ expect });
+    }
+    else {
+        std.debug.print("- None present\n", .{});
+    }
+
+    std.debug.print("\tContent-Type: ", .{});
+    if (req.content_type) |content_type| {
+        std.debug.print("{s}\n", .{ content_type });
+    }
+    else {
+        std.debug.print("- None present\n", .{});
+    }
+
+    std.debug.print("\tContent-Length: ", .{});
+    if (req.content_length) |content_length| {
+        std.debug.print("{d}\n", .{ content_length });
+    }
+    else {
+        std.debug.print("- None present\n", .{});
+    }
+
+    std.debug.print("\tTransfer-Encoding: {any}\n", .{ req.transfer_encoding });
+    std.debug.print("\tTransfer-Compression: {any}\n", .{ req.transfer_compression });
+    std.debug.print("\tKeep-Alive: {any}\n", .{ req.keep_alive });
 }
