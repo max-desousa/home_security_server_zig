@@ -198,6 +198,25 @@ fn multi_threaded_handler(
             };
 
             print_http_req_header(&http_request.head);
+
+            var buffer_for_reader : [4096]u8 = std.mem.zeroes([4096]u8);
+            var buffer_for_writer : [4096]u8 = std.mem.zeroes([4096]u8);
+            var alt_stream_reader = http_request.readerExpectNone(&buffer_for_reader);
+
+            const new_file = try std.Io.Dir.createFile(.cwd(), io, "test.ts", .{});
+            var new_file_writer = std.Io.File.writer(new_file, io, &buffer_for_writer);
+
+            while (alt_stream_reader.fillMore()) {
+                _ = try new_file_writer.interface.write(alt_stream_reader.buffered());
+                alt_stream_reader.tossBuffered();
+            }
+            else |err| {
+                if (error.EndOfStream != err) {
+                    return err;
+                }
+            }
+
+            unreachable;
         }
         else |_| {
             std.debug.print("Aborting parsing thead {d} at de-queueing due to cancellation...\n", .{ thread_num });
