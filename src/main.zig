@@ -198,6 +198,7 @@ fn multi_threaded_handler(
             };
 
             print_http_req_header(&http_request.head);
+            const save_info = get_save_info(&http_request);
 
             var buffer_for_reader : [4096]u8 = std.mem.zeroes([4096]u8);
             var buffer_for_writer : [4096]u8 = std.mem.zeroes([4096]u8);
@@ -223,51 +224,12 @@ fn multi_threaded_handler(
             return;
         }
     }
-    //while (true) {
-    //    //Perhaps use this to make sure the thread is canceled on request?
-    //    //std.Io.checkCancel(io) catch return;
-    //    var stream_to_transfer = server.accept(io) catch |err| {
-    //        if (std.Io.Cancelable.Canceled == err) {
-    //            std.debug.print("Cancellation error received at thread: {d}\n", .{thread_num});
-    //            return err;
-    //        }
-    //        std.debug.print("Accept failed: {any}\n", .{err});
-    //        continue;
-    //    };
-    //    defer stream_to_transfer.close(io);
-    //    std.debug.print("Connection handled by thread: {d}...\n", .{thread_num});
-
-    //    var buffer_stream_writer : [BUFF_SIZE]u8 = undefined;
-    //    var buffer_stream_reader : [BUFF_SIZE]u8 = undefined;
-
-    //    var stream_reader = stream_to_transfer.reader(io, &buffer_stream_reader);
-    //    var stream_writer = stream_to_transfer.writer(io, &buffer_stream_writer);
-
-    //    var http_server : std.http.Server = .init(&stream_reader.interface, &stream_writer.interface);
-
-    //    _ = &allocator;
-    //    const http_request = try http_server.receiveHead();
-    //    std.debug.print("HTTP metod received = {any}\n", .{ http_request.head.method });
-    //    std.debug.print("HTTP version received = {any}\n", .{ http_request.head.version });
-    //    if (http_request.head.content_length) |length| {
-    //        std.debug.print("Length found of: {d}...\n", .{length});
-    //    }
-    //    else {
-    //        std.debug.print("No (null) length found...\n", .{});
-    //    }
-
-    //    //serve.server_main(allocator, io, &stream_to_transfer) catch |err| {
-    //    //    if (std.Io.Cancelable.Canceled == err) {
-    //    //        std.debug.print("Cancellation error received at thread: {d}\n", .{thread_num});
-    //    //        return err;
-    //    //    }
-    //    //    std.debug.print("Accept failed: {any}\n", .{err});
-    //    //    continue;
-    //    //};
-    //    //std.debug.print("Request finished for thread: {d}\n", .{thread_num});
-    //}
 }
 
+pub const SaveInfo = struct {
+    file_name : []const u8,
+    dir_name : []const u8,
+};
 
 fn print_http_req_header(
     req : *std.http.Server.Request.Head,
@@ -303,4 +265,22 @@ fn print_http_req_header(
     std.debug.print("\tTransfer-Encoding: {any}\n", .{ req.transfer_encoding });
     std.debug.print("\tTransfer-Compression: {any}\n", .{ req.transfer_compression });
     std.debug.print("\tKeep-Alive: {any}\n", .{ req.keep_alive });
+}
+
+fn get_save_info(
+    request : *std.http.Server.Request,
+) void {
+}
+
+fn print_iterated_headers(
+    request : *std.http.Server.Request,
+) void {
+    var header_iterator = request.iterateHeaders();
+    std.debug.print("*********************************\n", .{});
+    std.debug.print("PRINTING HEADERS FROM ITERATOR:\n", .{});
+    while (header_iterator.next()) |header| {
+        std.debug.print("\tName: {s}\n\tValue: {s}\n\n", .{header.name, header.value});
+    }
+    std.debug.print("DONE WITH HEADER ITERATOR\n", .{});
+    std.debug.print("*********************************\n", .{});
 }
