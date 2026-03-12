@@ -267,9 +267,23 @@ fn print_http_req_header(
     std.debug.print("\tKeep-Alive: {any}\n", .{ req.keep_alive });
 }
 
-fn get_save_info(
+fn get_file_save_location(
+    allocator : std.mem.Allocator,
     request : *std.http.Server.Request,
-) void {
+) ![]const u8 {
+    return try std.mem.Allocator.dupe(allocator, u8, request.head.target);
+}
+
+fn get_save_file_name(
+    allocator : std.mem.Allocator,
+    request : *std.http.Server.Request,
+) ![]const u8 {
+    var header_iterator = request.iterateHeaders();
+    while (header_iterator.next()) |header| {
+        if (std.mem.eql(header.name, "File Name")) {
+            return try std.fmt.allocPrint(allocator, "{s}", header.value);
+        }
+    }
 }
 
 fn print_iterated_headers(
