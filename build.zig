@@ -20,6 +20,15 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
+    const mod_parser = b.createModule(.{
+        .root_source_file = b.path("src/parser/root_parser.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "debug", .module = mod_debug }
+        },
+    });
+
     const mod_req = b.createModule(.{
         .root_source_file = b.path("src/req/root_req.zig"),
         .target = target,
@@ -58,6 +67,7 @@ pub fn build(b: *std.Build) !void {
         .imports = &.{
             .{ .name = "config", .module = mod_config },
             .{ .name = "debug", .module = mod_debug },
+            .{ .name = "parser", .module = mod_parser },
         },
     });
 
