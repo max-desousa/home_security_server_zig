@@ -3,93 +3,40 @@ const config = @import("config");
 const requests = @import("requests");
 const serve = @import("serve");
 const options = @import("options");
+const debug = @import("debug");
+const threads = @import("threads");
 
-var running : bool = true;
+
 const MAX_THREAD_COUNT = options.max_threads;
 const MAX_PARSING_THEADS = MAX_THREAD_COUNT - 2;
-const STREAM_BUFF_SIZE : usize = 4096;
 
-pub const Server = struct {
-    host : []const u8,
-    port : u16,
-    addr : std.Io.net.IpAddress,
-    io : std.Io,
 
-    pub fn init(io : std.Io) !Server {
-        const host: []const u8 = config.get_desired_host();
-        const port: u16 = config.get_desired_port();
-        const addr = try std.Io.net.IpAddress.parseIp4(host, port);
 
-        return .{ .host = host, .port = port, .addr = addr, .io = io };
-    }
-
-    pub fn listen(self: Server) !std.Io.net.Server {
-        std.debug.print("Server Addr: {s}:{any}\n", .{self.host, self.port});
-        return try self.addr.listen(
-            self.io, 
-            .{
-                .mode = .stream,
-                .protocol = .tcp,
-            }
-        );
-    }
-};
 
 
 //##############################################################################
-//
-// Function: 
+// Function:    main
 //
 // Description: 
-//
-//##############################################################################
-fn handle_connection(
-    allocator : std.mem.Allocator,
-    io : std.Io, 
-    stream : *std.Io.net.Stream, 
-) void {
-    defer stream.close(io);
-
-    requests.parse_and_serve_req_path(allocator, io, stream) catch |err| {
-        std.debug.print("Top level failure: {any}\n", .{err});
-        return;
-    };
-}
-
-fn interrupt_handler(sig: std.c.SIG) callconv(.c) void {
-    _ = sig;
-    std.debug.print("In custom sig handler...\n", .{});
-    running = false;
-}
-
-//##############################################################################
-//
-// Function: main
-//
-// Description: 
-//
 //##############################################################################
 pub fn main() !void {
-
-    // Set up SIGINT handler for graceful closing
-    var action : std.c.Sigaction = .{
-        .handler = .{ .handler = interrupt_handler },
-        .mask = std.posix.sigemptyset(),
-        .flags = 0,
-    };
-    std.posix.sigaction(.INT, &action, null);
-
     //**************************************************************************
-    // BEGIN BOILER PLATE
+    // BEGIN BOILER PLATE (Creating allocators and io)
     //**************************************************************************
-    //
+
     // Create allocator needed for multiple aspects of the program
     var allocator_object : std.heap.DebugAllocator(.{}) = .init;
     defer _ = allocator_object.deinit();
     const allocator = allocator_object.allocator();
 
     // Create threaded instance with multithreading support
-    var threaded : std.Io.Threaded = .init(allocator, .{ .environ = .empty });
+    var threaded : std.Io.Threaded = .init(
+        allocator,
+        .{ 
+            .environ = .empty,
+            .concurrent_limit = .limited(MAX_THREAD_COUNT),
+        }
+    );
     defer threaded.deinit();
 
     // get io instance.
@@ -99,32 +46,38 @@ pub fn main() !void {
     // END BOILER PLATE
     //**************************************************************************
 
+
+    // Set up SIGINT handler for graceful closing
+    var action : std.c.Sigaction = .{
+        .handler = .{ .handler = threads.ctrl_c_override },
+        .mask = std.posix.sigemptyset(),
+        .flags = 0,
+    };
+    std.posix.sigaction(.INT, &action, null);
+
     // Reading/establishing config file
     try config.establish_config(io);
-    std.debug.print("Desired Host from config: {s}\n", .{config.get_desired_host()});
+    std.debug.print("Desired Host from config: {s}\n", .{ config.get_desired_host() });
 
-    //Create a server object
-    const server_struct : Server = try .init(io);
-    var server = try server_struct.listen();
-    defer server.deinit(io);
+    //Create a server object - done here to simplify error union
 
     //Create array list of to hold all threads that need to be closed
     //TODO: This array list should be all threads - but I've not developed the thread 
     //for compressing/modifying/appending videos... So - this array list CURRENTLY
     //only has the parsing threads PLUS the accepting thread.
-    var threads_to_close : std.ArrayList(std.Io.Future(anyerror!void)) = try .initCapacity(allocator, (MAX_PARSING_THEADS + 1));
+    var threads_to_close : std.ArrayList(std.Io.Future(void)) = try .initCapacity(allocator, (MAX_PARSING_THEADS + 1));
 
     //Create queue for transferring connections between threads. 
     var buffer_for_streams : [25]std.Io.net.Stream = undefined;
     var queue_for_streams : std.Io.Queue(std.Io.net.Stream) = .init(&buffer_for_streams);
 
     //Create thread for accepting connections from the server
-    const accept_task = try io.concurrent(accept_thread, .{ io, &server, &queue_for_streams });
+    const accept_task = try io.concurrent(threads.accept, .{ io, &queue_for_streams });
     try threads_to_close.append(allocator, accept_task);
 
     //Create threads for operations/parsing accepted connections.
     for (0..MAX_PARSING_THEADS) |i| {
-        const task = try io.concurrent(multi_threaded_handler, .{allocator, io, &queue_for_streams, @intCast(i)});
+        const task = try io.concurrent(threads.connection_router, .{allocator, io, &queue_for_streams, @intCast(i)});
         try threads_to_close.append(allocator, task);
     }
 
@@ -132,169 +85,84 @@ pub fn main() !void {
     defer {
         for (threads_to_close.items, 0..) |*future, i| {
             std.debug.print("Cancelling thread: {d}\n", .{i});
-            _ = future.cancel(io) catch {};
+            _ = future.cancel(io);
         }
         std.debug.print("Deiniting arraylist...\n", .{});
         threads_to_close.deinit(allocator);
     }
 
     //empty loop to wait for Ctrl+C thanks to sig override.
-    while (running) {
+    while (threads.Running.load(.seq_cst)) {
     }
 }
 
 
-fn accept_thread(
-    io : std.Io, 
-    server : *std.Io.net.Server,
-    queue : *std.Io.Queue(std.Io.net.Stream),
-) anyerror!void {
-    while (true) {
-        io.checkCancel() catch {
-            std.debug.print("Cancelling accept thread due to top level cancellation\n", .{});
-            return;
-        };
 
-        //Handle acceptance of a stream.
-        if (server.accept(io)) |stream| {
-            queue.putOne(io, stream) catch {
-                std.debug.print("Aborting accept thead at queueing due to cancellation...\n", .{});
-                return;
-            };
-        }
-        else |err| {
-            std.debug.print("Error received on connection acceptance in thread: {any}\n", .{ err });
-            return;
-        }
-    }
-}
 
-fn multi_threaded_handler(
-    allocator : std.mem.Allocator,
-    io : std.Io,
-    queue : *std.Io.Queue(std.Io.net.Stream),
-    thread_num : u8,
-) anyerror!void {
-    _ = &allocator;
-    std.debug.print("Thread {d} started...\n", .{thread_num});
-    while (true) {
-        io.checkCancel() catch {
-            std.debug.print("Cancelling accept thread due to top level cancellation\n", .{});
-            return;
-        };
-        //Handle acceptance of a stream.
-        if (queue.getOne(io)) |stream| {
-            std.debug.print("Processing new stream on thread {d}\n", .{ thread_num });
-            var buffer_stream_writer : [STREAM_BUFF_SIZE]u8 = undefined;
-            var buffer_stream_reader : [STREAM_BUFF_SIZE]u8 = undefined;
-
-            var stream_reader = stream.reader(io, &buffer_stream_reader);
-            var stream_writer = stream.writer(io, &buffer_stream_writer);
-
-            var http_server : std.http.Server = .init(&stream_reader.interface, &stream_writer.interface);
-            var http_request = http_server.receiveHead() catch |err| {
-                std.debug.print("Error processing http_request in parsing thread: {any}\n", .{ err });
-                continue;
-            };
-
-            print_http_req_header(&http_request.head);
-            const save_info = get_save_info(&http_request);
-
-            var buffer_for_reader : [4096]u8 = std.mem.zeroes([4096]u8);
-            var buffer_for_writer : [4096]u8 = std.mem.zeroes([4096]u8);
-            var alt_stream_reader = http_request.readerExpectNone(&buffer_for_reader);
-
-            const new_file = try std.Io.Dir.createFile(.cwd(), io, "test.ts", .{});
-            var new_file_writer = std.Io.File.writer(new_file, io, &buffer_for_writer);
-
-            while (alt_stream_reader.fillMore()) {
-                _ = try new_file_writer.interface.write(alt_stream_reader.buffered());
-                alt_stream_reader.tossBuffered();
-            }
-            else |err| {
-                if (error.EndOfStream != err) {
-                    return err;
-                }
-            }
-
-            unreachable;
-        }
-        else |_| {
-            std.debug.print("Aborting parsing thead {d} at de-queueing due to cancellation...\n", .{ thread_num });
-            return;
-        }
-    }
-}
-
-pub const SaveInfo = struct {
-    file_name : []const u8,
-    dir_name : []const u8,
-};
-
-fn print_http_req_header(
-    req : *std.http.Server.Request.Head,
-) void {
-    std.debug.print("\tMethod: {any}\n", .{ req.method });
-    std.debug.print("\tTarget: {s}\n", .{ req.target });
-    std.debug.print("\tVersion: {any}\n", .{ req.version });
-
-    std.debug.print("\tExpect: ", .{});
-    if (req.expect) |expect| {
-        std.debug.print("{s}\n", .{ expect });
-    }
-    else {
-        std.debug.print("- None present\n", .{});
-    }
-
-    std.debug.print("\tContent-Type: ", .{});
-    if (req.content_type) |content_type| {
-        std.debug.print("{s}\n", .{ content_type });
-    }
-    else {
-        std.debug.print("- None present\n", .{});
-    }
-
-    std.debug.print("\tContent-Length: ", .{});
-    if (req.content_length) |content_length| {
-        std.debug.print("{d}\n", .{ content_length });
-    }
-    else {
-        std.debug.print("- None present\n", .{});
-    }
-
-    std.debug.print("\tTransfer-Encoding: {any}\n", .{ req.transfer_encoding });
-    std.debug.print("\tTransfer-Compression: {any}\n", .{ req.transfer_compression });
-    std.debug.print("\tKeep-Alive: {any}\n", .{ req.keep_alive });
-}
-
-fn get_file_save_location(
-    allocator : std.mem.Allocator,
-    request : *std.http.Server.Request,
-) ![]const u8 {
-    return try std.mem.Allocator.dupe(allocator, u8, request.head.target);
-}
-
-fn get_save_file_name(
-    allocator : std.mem.Allocator,
-    request : *std.http.Server.Request,
-) ![]const u8 {
-    var header_iterator = request.iterateHeaders();
-    while (header_iterator.next()) |header| {
-        if (std.mem.eql(header.name, "File Name")) {
-            return try std.fmt.allocPrint(allocator, "{s}", header.value);
-        }
-    }
-}
-
-fn print_iterated_headers(
-    request : *std.http.Server.Request,
-) void {
-    var header_iterator = request.iterateHeaders();
-    std.debug.print("*********************************\n", .{});
-    std.debug.print("PRINTING HEADERS FROM ITERATOR:\n", .{});
-    while (header_iterator.next()) |header| {
-        std.debug.print("\tName: {s}\n\tValue: {s}\n\n", .{header.name, header.value});
-    }
-    std.debug.print("DONE WITH HEADER ITERATOR\n", .{});
-    std.debug.print("*********************************\n", .{});
-}
+//fn print_http_req_header(
+//    req : *std.http.Server.Request.Head,
+//) void {
+//    debug.print("\tMethod: {any}\n", .{ req.method });
+//    debug.print("\tTarget: {s}\n", .{ req.target });
+//    debug.print("\tVersion: {any}\n", .{ req.version });
+//
+//    debug.print("\tExpect: ", .{});
+//    if (req.expect) |expect| {
+//        debug.print("{s}\n", .{ expect });
+//    }
+//    else {
+//        debug.print("- None present\n", .{});
+//    }
+//
+//    debug.print("\tContent-Type: ", .{});
+//    if (req.content_type) |content_type| {
+//        debug.print("{s}\n", .{ content_type });
+//    }
+//    else {
+//        debug.print("- None present\n", .{});
+//    }
+//
+//    debug.print("\tContent-Length: ", .{});
+//    if (req.content_length) |content_length| {
+//        debug.print("{d}\n", .{ content_length });
+//    }
+//    else {
+//        debug.print("- None present\n", .{});
+//    }
+//
+//    debug.print("\tTransfer-Encoding: {any}\n", .{ req.transfer_encoding });
+//    debug.print("\tTransfer-Compression: {any}\n", .{ req.transfer_compression });
+//    debug.print("\tKeep-Alive: {any}\n", .{ req.keep_alive });
+//}
+//
+//fn get_file_save_location(
+//    allocator : std.mem.Allocator,
+//    request : *std.http.Server.Request,
+//) ![]const u8 {
+//    return try std.mem.Allocator.dupe(allocator, u8, request.head.target);
+//}
+//
+//fn get_save_file_name(
+//    allocator : std.mem.Allocator,
+//    request : *std.http.Server.Request,
+//) ![]const u8 {
+//    var header_iterator = request.iterateHeaders();
+//    while (header_iterator.next()) |header| {
+//        if (std.mem.eql(header.name, "File Name")) {
+//            return try std.fmt.allocPrint(allocator, "{s}", header.value);
+//        }
+//    }
+//}
+//
+//fn print_iterated_headers(
+//    request : *std.http.Server.Request,
+//) void {
+//    var header_iterator = request.iterateHeaders();
+//    debug.print("*********************************\n", .{});
+//    debug.print("PRINTING HEADERS FROM ITERATOR:\n", .{});
+//    while (header_iterator.next()) |header| {
+//        debug.print("\tName: {s}\n\tValue: {s}\n\n", .{header.name, header.value});
+//    }
+//    debug.print("DONE WITH HEADER ITERATOR\n", .{});
+//    debug.print("*********************************\n", .{});
+//}

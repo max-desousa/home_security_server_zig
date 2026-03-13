@@ -14,6 +14,12 @@ pub fn build(b: *std.Build) !void {
     const options = b.addOptions();
     options.addOption(usize, "max_threads", option_max_threads);
 
+    const mod_debug = b.createModule(.{
+        .root_source_file = b.path("src/debug/root_debug.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const mod_req = b.createModule(.{
         .root_source_file = b.path("src/req/root_req.zig"),
         .target = target,
@@ -45,6 +51,16 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
+    const mod_threads = b.createModule(.{
+        .root_source_file = b.path("src/threads/root_threads.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "config", .module = mod_config },
+            .{ .name = "debug", .module = mod_debug },
+        },
+    });
+
     const exe = b.addExecutable(.{
         .name = "home_security_server_zig",
         .root_module = b.createModule(.{
@@ -55,6 +71,8 @@ pub fn build(b: *std.Build) !void {
                 .{ .name = "config", .module = mod_config },
                 .{ .name = "requests", .module = mod_req },
                 .{ .name = "serve", .module = mod_serve },
+                .{ .name = "debug", .module = mod_debug },
+                .{ .name = "threads", .module = mod_threads },
             },
         }),
     });
