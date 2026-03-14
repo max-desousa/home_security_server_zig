@@ -1,6 +1,8 @@
 const std = @import("std");
 const config = @import("config");
 const debug = @import("debug");
+const parser = @import("parser");
+const ComplexStream = @import("complexStream");
 
 
 //Global const's
@@ -145,8 +147,35 @@ pub fn connection_router(
         };
         //Handle acceptance of a stream.
         if (queue.getOne(io)) |stream| {
-            _ = &stream;
             std.debug.print("Processing new stream on thread {d}\n", .{ thread_num });
+
+            var buffer_for_reading : [STREAM_BUFF_SIZE]u8 = undefined;
+            var buffer_for_writing : [STREAM_BUFF_SIZE]u8 = undefined;
+
+            var complex_stream : ComplexStream = ComplexStream.init(
+                io,
+                stream,
+                &buffer_for_reading,
+                &buffer_for_writing,
+            ) catch |err| {
+                std.log.info("Issue establishing stream: {any}\n", .{err});
+                continue;
+            };
+
+            const method = complex_stream.get_method() catch |err| {
+                std.log.err("Could not find method due to error: {any}\n", .{ err });
+                continue;
+            };
+
+            switch(method) {
+                .GET => parser.get.generic_getter(),
+                .POST => parser.post.generic_poster(&complex_stream), 
+                else => {
+                    std.log.info("Received an unsupported http request (method: {s}) on thread {d}\n", .{ @tagName(method), thread_num });
+                },
+            }
+
+
         //    var buffer_stream_writer : [STREAM_BUFF_SIZE]u8 = undefined;
         //    var buffer_stream_reader : [STREAM_BUFF_SIZE]u8 = undefined;
 

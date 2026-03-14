@@ -14,6 +14,12 @@ pub fn build(b: *std.Build) !void {
     const options = b.addOptions();
     options.addOption(usize, "max_threads", option_max_threads);
 
+    const mod_complex_stream = b.createModule(.{
+        .root_source_file = b.path("src/net/complexStream/root_complex_stream.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const mod_debug = b.createModule(.{
         .root_source_file = b.path("src/debug/root_debug.zig"),
         .target = target,
@@ -25,7 +31,8 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{ .name = "debug", .module = mod_debug }
+            .{ .name = "debug", .module = mod_debug },
+            .{ .name = "complexStream", .module = mod_complex_stream },
         },
     });
 
@@ -68,6 +75,7 @@ pub fn build(b: *std.Build) !void {
             .{ .name = "config", .module = mod_config },
             .{ .name = "debug", .module = mod_debug },
             .{ .name = "parser", .module = mod_parser },
+            .{ .name = "complexStream", .module = mod_complex_stream },
         },
     });
 
