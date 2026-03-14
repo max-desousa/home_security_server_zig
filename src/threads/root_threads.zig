@@ -169,7 +169,7 @@ pub fn connection_router(
 
             switch(method) {
                 .GET => parser.get.generic_getter(),
-                .POST => parser.post.generic_poster(&complex_stream), 
+                .POST => parser.post.generic_poster(io, &complex_stream), 
                 else => {
                     std.log.info("Received an unsupported http request (method: {s}) on thread {d}\n", .{ @tagName(method), thread_num });
                 },
