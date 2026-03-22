@@ -138,7 +138,6 @@ pub fn connection_router(
     queue : *std.Io.Queue(std.Io.net.Stream),
     thread_num : u8,
 ) void {
-    _ = &allocator;
     std.debug.print("Thread {d} started...\n", .{thread_num});
     while (true) {
         io.checkCancel() catch {
@@ -152,13 +151,17 @@ pub fn connection_router(
             var buffer_for_reading : [STREAM_BUFF_SIZE]u8 = undefined;
             var buffer_for_writing : [STREAM_BUFF_SIZE]u8 = undefined;
 
-            var complex_stream : ComplexStream = ComplexStream.init(
-                io,
+            var complex_stream : ComplexStream = ComplexStream.create(
                 stream,
                 &buffer_for_reading,
                 &buffer_for_writing,
             ) catch |err| {
                 std.log.info("Issue establishing stream: {any}\n", .{err});
+                continue;
+            };
+
+            complex_stream.setup(io) catch |err| {
+                std.log.err("Could not setup stream due to error: {any}\n", .{ err });
                 continue;
             };
 
@@ -169,7 +172,7 @@ pub fn connection_router(
 
             switch(method) {
                 .GET => parser.get.generic_getter(),
-                .POST => parser.post.generic_poster(io, &complex_stream), 
+                .POST => parser.post.generic_poster(allocator, io, &complex_stream), 
                 else => {
                     std.log.info("Received an unsupported http request (method: {s}) on thread {d}\n", .{ @tagName(method), thread_num });
                 },
