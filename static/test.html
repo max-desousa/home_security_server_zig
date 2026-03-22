@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>My Zig Site</title>
+  <style>
+    .button {
+      display: inline-block;
+      padding: 0.8em 1.6em;
+      margin: 0.4em;
+      background: #0066cc;
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: bold;
+      transition: background 0.15s;
+    }
+    .button:hover { background: #0052a3; }
+    .danger  { background: #c0392b; }
+    .danger:hover { background: #a93226; }
+  </style>
+</head>
+<body>
+
+  <h1>Welcome to my Zig server!</h1>
+
+  <a href="../../dashboard"    class="button">Dashboard</a>
+  <a href="/profile"      class="button">Profile</a>
+  <a href="/settings"     class="button">Settings</a>
+  <a href="/admin/users"  class="button">User Management</a>
+  <a href="/logout"       class="button danger">Log out</a>
+
+</body>
+</html>
