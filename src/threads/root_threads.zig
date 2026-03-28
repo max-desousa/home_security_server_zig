@@ -177,41 +177,6 @@ pub fn connection_router(
                     std.log.info("Received an unsupported http request (method: {s}) on thread {d}\n", .{ @tagName(method), thread_num });
                 },
             }
-
-
-        //    var buffer_stream_writer : [STREAM_BUFF_SIZE]u8 = undefined;
-        //    var buffer_stream_reader : [STREAM_BUFF_SIZE]u8 = undefined;
-
-        //    var stream_reader = stream.reader(io, &buffer_stream_reader);
-        //    var stream_writer = stream.writer(io, &buffer_stream_writer);
-
-        //    var http_server : std.http.Server = .init(&stream_reader.interface, &stream_writer.interface);
-        //    var http_request = http_server.receiveHead() catch |err| {
-        //        std.debug.print("Error processing http_request in parsing thread: {any}\n", .{ err });
-        //        continue;
-        //    };
-
-        //    print_http_req_header(&http_request.head);
-        //    const save_info = get_save_info(&http_request);
-
-        //    var buffer_for_reader : [4096]u8 = std.mem.zeroes([4096]u8);
-        //    var buffer_for_writer : [4096]u8 = std.mem.zeroes([4096]u8);
-        //    var alt_stream_reader = http_request.readerExpectNone(&buffer_for_reader);
-
-        //    const new_file = try std.Io.Dir.createFile(.cwd(), io, "test.ts", .{});
-        //    var new_file_writer = std.Io.File.writer(new_file, io, &buffer_for_writer);
-
-        //    while (alt_stream_reader.fillMore()) {
-        //        _ = try new_file_writer.interface.write(alt_stream_reader.buffered());
-        //        alt_stream_reader.tossBuffered();
-        //    }
-        //    else |err| {
-        //        if (error.EndOfStream != err) {
-        //            return err;
-        //        }
-        //    }
-
-        //    unreachable;
         }
         else |_| {
             std.debug.print("Aborting parsing thead {d} at de-queueing due to cancellation...\n", .{ thread_num });

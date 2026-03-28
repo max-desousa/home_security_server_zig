@@ -57,11 +57,20 @@ fn archive_payload(
 
     //Handle the process of addressing a bad request where the client tries to
     //rearchive a file that it's already archived on the server
-    const file_exists = check_if_file_already_exitst(io, archive_path);
+    const file_exists = check_if_file_already_exists(io, archive_path);
 
     if (file_exists) {
-        // TODO: Send rejection
-        @panic("TODO: send a rejection to the client that the file already exists on the server and cannot be newly archived\n");
+        stream.request.respond(
+            "",
+            .{ 
+                .keep_alive = false,
+                .status = .conflict,
+            }
+        ) catch |err| {
+            std.log.err("Error: {any}\n", .{ err });
+            @panic("Error responding to client");
+        };
+        return;
     }
 
     ensure_directory_exists(io, archive_path) catch {
@@ -92,6 +101,11 @@ fn archive_payload(
             @panic("Unhandled file writing error\n");
         }
     }
+
+    stream.request.respond("", .{ .keep_alive = false }) catch |err| {
+        std.log.err("Error: {any}\n", .{ err });
+        @panic("Error responding to client");
+    };
 }
 
 
@@ -122,7 +136,7 @@ fn get_desired_path_for_archival(
 //
 // Description: 
 //##############################################################################
-fn check_if_file_already_exitst(io : std.Io, path : []const u8) bool {
+fn check_if_file_already_exists(io : std.Io, path : []const u8) bool {
     const failable_stat = std.Io.Dir.statFile(.cwd(), io, path, .{ .follow_symlinks = false});
 
     if (failable_stat) |_| {
