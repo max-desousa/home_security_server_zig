@@ -5,3 +5,4 @@ error.txt
 config.zap
 .grok/**
 **/*.ts
+**/Archives/**/*
