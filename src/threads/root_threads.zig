@@ -2,6 +2,7 @@ const std = @import("std");
 const config = @import("config");
 const debug = @import("debug");
 const parser = @import("parser");
+const system = @import("system");
 const ComplexStream = @import("complexStream");
 
 
@@ -183,4 +184,71 @@ pub fn connection_router(
             return;
         }
     }
+}
+
+
+//##############################################################################
+// Function: 
+//
+// Description: 
+//##############################################################################
+pub fn system_cleanup_thread(
+    io : std.Io,
+    allocator : std.mem.Allocator,
+) void {
+    while(true) {
+
+        io.checkCancel() catch {
+            std.log.err("Cancelling cleanup thread due to external issues\n", .{});
+            return;
+        };
+
+        const archive_size = system.get_size_of_archive(
+            io,
+            allocator,
+        ) catch |err| {
+            std.log.err("Ending program: Unrecoverable issue while calculating archive size: {any}\n", .{ err });
+            induce_thread_cancellation();
+            return;
+        };
+        const memory_threshold = config.get_memory_threshold();
+
+        if (archive_size >= memory_threshold) {
+            system.cleanup_archive(io, allocator, archive_size, memory_threshold) catch |err| {
+                std.log.err("Ending program: Unrecoverable issue in cleanup thread: {any}\n", .{ err });
+                induce_thread_cancellation();
+                return;
+            };
+        }
+        // Memory threshold has not been met. Start timer to sleep this thread 
+        // based on amount of available space. (Further from the threshold - save
+        // resources by letting the thread sleep more. If we're close to the 
+        // threshold, tighten the sleep time.
+        else {
+            //Not sure if I want to implement this variable sleep yet... need
+            //to consider (because on crash this thread could keep program
+            //running with this method. For now... constant polling.
+            
+            //const sleep_duration = calculate_adaptive_thread_sleep();
+            //io.sleep(sleep_duration, .real);
+        }
+    }
+}
+
+
+//##############################################################################
+// Function: 
+//
+// Description: 
+//##############################################################################
+fn calculate_adaptive_thread_sleep(
+    current_usage : u64,
+    memory_threshold : u64,
+) std.Io.Duration {
+    const headroom : f64 = @as(f64, @floatFromInt(memory_threshold -
+            current_usage)) / @as(f64, @floatFromInt(memory_threshold));
+
+    const sleep_as_float = headroom * @as(f64, @floatFromInt(600_000));
+
+    return std.Io.Duration.fromMilliseconds(@as(i64, @floatFromInt(sleep_as_float)));
 }

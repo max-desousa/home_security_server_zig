@@ -12,6 +12,8 @@ const CONFIG_FILE_NAME = "config.zap";
 const FIELD_DESIRED_HOST = "[ requested host address ]";
 const FIELD_DESIRED_PORT = "[ requested port ]";
 
+const FIELD_MEMORY_THRESHOLD = "[ targeted max memory for archive ]";
+
 //##############################################################################
 
 // Backing values of the fields in the config file
@@ -19,6 +21,8 @@ var BUFFER_FOR_VALUE_DESIRED_HOST : [256]u8 = undefined;
 var VALUE_DESIRED_HOST: []const u8 = BUFFER_FOR_VALUE_DESIRED_HOST[0..0];
 
 var VALUE_DESIRED_PORT : u16 = undefined;
+
+var VALUE_MEMORY_THRESHOLD : u64 = undefined;
 
 //##############################################################################
 
@@ -31,6 +35,10 @@ pub fn get_desired_host() []const u8 {
 
 pub fn get_desired_port() u16 {
     return VALUE_DESIRED_PORT;
+}
+
+pub inline fn get_memory_threshold() u64 {
+    return VALUE_MEMORY_THRESHOLD;
 }
 
 //##############################################################################
@@ -60,6 +68,9 @@ fn parse_file(io : std.Io, file : std.Io.File) !void {
         }
         else if (std.mem.eql(u8, before, FIELD_DESIRED_PORT)) {
             VALUE_DESIRED_PORT = try std.fmt.parseInt(u16, after, 10);
+        }
+        else if (std.mem.eql(u8, before, FIELD_MEMORY_THRESHOLD)) {
+            VALUE_MEMORY_THRESHOLD = try std.fmt.parseInt(u64, after, 10);
         }
         else {
             unreachable;
@@ -94,6 +105,9 @@ fn make_default_config(io : std.Io) !void {
 
     VALUE_DESIRED_PORT = 3490;
     try writer.print("{s} = {d}\n", .{FIELD_DESIRED_PORT, VALUE_DESIRED_PORT});
+
+    VALUE_MEMORY_THRESHOLD = 5_000;
+    try writer.print("{s} = {d}\n", .{FIELD_MEMORY_THRESHOLD, VALUE_MEMORY_THRESHOLD});
     
     try file_writer.end();
 }

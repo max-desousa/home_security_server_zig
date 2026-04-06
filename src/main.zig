@@ -77,6 +77,9 @@ pub fn main() !void {
         try threads_to_close.append(allocator, task);
     }
 
+    const cleanup_task = try io.concurrent(threads.system_cleanup_thread, .{ io, allocator });
+    try threads_to_close.append(allocator, cleanup_task);
+
     //Clean up all threads when program closes
     defer {
         for (threads_to_close.items, 0..) |*future, i| {

@@ -20,6 +20,12 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
+    const mod_system = b.createModule(.{
+        .root_source_file = b.path("src/system/root_system.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const mod_debug = b.createModule(.{
         .root_source_file = b.path("src/debug/root_debug.zig"),
         .target = target,
@@ -76,6 +82,7 @@ pub fn build(b: *std.Build) !void {
             .{ .name = "debug", .module = mod_debug },
             .{ .name = "parser", .module = mod_parser },
             .{ .name = "complexStream", .module = mod_complex_stream },
+            .{ .name = "system", .module = mod_system },
         },
     });
 
