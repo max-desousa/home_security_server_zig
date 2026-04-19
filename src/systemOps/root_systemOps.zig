@@ -1,5 +1,4 @@
 const std = @import("std");
-const Request = @import("request");
 
 pub fn open_static_html(io : std.Io, path : []const u8) !?std.Io.File {
     var path_buffer : [512]u8 = std.mem.zeroes([512]u8);
