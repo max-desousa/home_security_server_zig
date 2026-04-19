@@ -116,8 +116,6 @@ pub fn cleanup_archive(
         }
     }.lessThan);
 
-    std.debug.print("==========\nPrinting sorted list:\n\n", .{});
-
     var current_size = current_size_of_archive;
 
     for (sortable_file_detail_list.items) |item| {
