@@ -181,5 +181,6 @@ pub fn connection_router(
             std.debug.print("Aborting parsing thead {d} at de-queueing due to cancellation...\n", .{ thread_num });
             return;
         }
+        std.debug.print("Done handling request on thread: {d}\n", .{ thread_num });
     }
 }

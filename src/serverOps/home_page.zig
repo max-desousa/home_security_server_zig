@@ -12,6 +12,7 @@ pub fn serve(
     allocator : std.mem.Allocator,
     stream : *ComplexStream,
 ) void {
+    std.debug.print("Entering failable home page serving function...\n", .{});
     failable_serve_home_page(io, allocator, stream) catch {
         @panic("need to create failure upload path");
     };
@@ -36,6 +37,7 @@ fn failable_serve_home_page(
     };
 
     if (static_home_exists) {
+        std.debug.print("Entering serving of static hello world html file\n", .{});
         try html.serve(io, allocator, stream, "static/HelloWorld.html");
     }
     else {
