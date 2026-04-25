@@ -1,14 +1,11 @@
 const std = @import("std");
 const ComplexStream = @import("complexStream");
 
-pub fn serve(
+pub fn serve_file(
     io : std.Io,
-    allocator : std.mem.Allocator, 
     stream : *ComplexStream,
     sub_path : []const u8,
 ) !void {
-    _ = &allocator;
-    _ = &stream;
     const file = try std.Io.Dir.openFile(.cwd(), io, sub_path, .{.allow_directory = false});
     defer file.close(io);
 
@@ -17,10 +14,15 @@ pub fn serve(
 
     var buffer_body_writer : [512]u8 = undefined;
     var body_writer = try stream.request.respondStreaming(&buffer_body_writer, .{});
-    defer body_writer.flush() catch {};
+    defer body_writer.end() catch {};
 
-    //var writer = &body_writer.writer;
-    //writer.noneSendFile()
-    _ = try std.http.BodyWriter.noneSendFile(&body_writer.writer, &file_reader, .unlimited);
+    _ = try file_reader.interface.streamRemaining(&body_writer.writer);
+}
 
+//******************************************************************************
+//* Function:    
+//*
+//* Description: 
+//******************************************************************************
+fn generate_and_serve_directory_html() void {
 }

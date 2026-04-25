@@ -1,5 +1,6 @@
 const std = @import("std");
 const ComplexStream = @import("complexStream");
+const sysOps = @import("sysOps");
 
 const SIZE_FOR_BUFFERS = 4096;
 
@@ -73,7 +74,7 @@ fn archive_payload(
         return;
     }
 
-    ensure_directory_exists(io, archive_path) catch {
+    const folder_status = ensure_directory_exists(io, archive_path) catch {
         @panic("TODO: handle inability to create folder to house archive files\n");
     };
 
@@ -101,6 +102,14 @@ fn archive_payload(
             @panic("Unhandled file writing error\n");
         }
     }
+
+    if (.created == folder_status) {
+        const nullable_path_cut = std.mem.cutLast(u8, archive_path, "/");
+        if (nullable_path_cut) |path_cut| {
+            sysOps.generate_folder_html(io, path_cut.@"0");
+        }
+    }
+    sysOps.generate_folder_html(io, "Archives");
 
     stream.request.respond("", .{ .keep_alive = false }) catch |err| {
         std.log.err("Error: {any}\n", .{ err });
@@ -156,7 +165,7 @@ fn check_if_file_already_exists(io : std.Io, path : []const u8) bool {
 //
 // Description: 
 //##############################################################################
-fn ensure_directory_exists(io : std.Io, archive_path : []const u8) !void {
+fn ensure_directory_exists(io : std.Io, archive_path : []const u8) !std.Io.Dir.CreatePathStatus {
     const nullable_cut = std.mem.cutLast(u8, archive_path, "/");
 
     const directory = if (nullable_cut) |cut| blk: {
@@ -166,5 +175,5 @@ fn ensure_directory_exists(io : std.Io, archive_path : []const u8) !void {
         return error.NoDirRequested;
     };
 
-    _ = try std.Io.Dir.createDirPathStatus(.cwd(), io, directory, .default_dir);
+    return try std.Io.Dir.createDirPathStatus(.cwd(), io, directory, .default_dir);
 }

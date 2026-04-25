@@ -36,11 +36,11 @@ fn failable_serve_home_page(
     };
 
     if (static_home_exists) {
-        try html.serve(io, allocator, stream, "static/HelloWorld.html");
+        try html.serve_file(io, stream, "static/HelloWorld.html");
     }
     else {
         try generate_temporary_home_page(io, allocator);
-        try html.serve(io, allocator, stream, ".generated/HelloWorld.html");
+        try html.serve_file(io, stream, ".generated/HelloWorld.html");
         std.Io.Dir.deleteFile(.cwd(), io, ".generated/HelloWorld.html") catch {};
     }
 }
