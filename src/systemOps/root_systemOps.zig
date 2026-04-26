@@ -1,5 +1,6 @@
 const std = @import("std");
 const html_preamble = @embedFile("serve_dir_preamble.txt");
+const ComplexStream = @import("complexStream");
 
 pub fn open_static_html(io : std.Io, path : []const u8) !?std.Io.File {
     var path_buffer : [512]u8 = std.mem.zeroes([512]u8);
@@ -21,20 +22,43 @@ pub fn open_static_html(io : std.Io, path : []const u8) !?std.Io.File {
     };
     return file;
 }
-pub fn request_is_directory(path : []const u8) bool {
+
+
+//******************************************************************************
+//* Function:    
+//* 
+//* Description: 
+//******************************************************************************
+pub fn request_is_directory(io : std.Io, stream : *ComplexStream) bool {
+    stream.target_file_system_path = std.fmt.bufPrint(
+        &stream.backing_buffer_for_target_filesys_path,
+        "Archives{s}",
+        .{ stream.header_target }
+    ) catch return false;
     
+    std.Io.Dir.access(.cwd(), io, stream.target_file_system_path.?, .{ .read = true }) catch |err| {
+        if (error.FileNotFound == err) {
+            std.log.debug("request_is_directory returned false for path {s}\n", .{ stream.header_target });
+            stream.target_file_system_path = null;
+            return false;
+        }
+    };
+    std.log.debug("request_is_directory returned true for path {s}\n", .{ stream.header_target });
+    return true;
 }
+
 
 //******************************************************************************
 //* Function:    generate_folder_html
 //* 
 //* Description: 
 //******************************************************************************
-pub fn generate_folder_html(io : std.Io, path : []const u8) !std.Io.File {
-    var html_file = try std.Io.Dir.createFile(.cwd(), io, ".index.html", .{ .lock = .exclusive });
-    errdefer html_file.close(io);
-
-    var buffer_html_file_writer : [512]u8 = undefined;
+pub fn generate_html_for_folder(
+    io : std.Io,
+    html_file : *std.Io.File,
+    path : []const u8
+) !void {
+    var buffer_html_file_writer : [2048]u8 = undefined;
     var html_file_writer = html_file.writer(io, &buffer_html_file_writer);
     defer html_file_writer.interface.flush() catch {};
 
@@ -58,8 +82,12 @@ pub fn generate_folder_html(io : std.Io, path : []const u8) !std.Io.File {
     while (dir_iterator.next(io)) |nullable_entry| {
         const entry = nullable_entry orelse break;
         switch (entry.kind) {
-            .file => try html_file_writer.interface.writeAll("<script>addRow(\"NewCamera_2527704881\",\"NewCamera_2527704881/index.html\",1,4096,\"4.0 kB\",1776524553,\"4/18/26, 11:02:33 AM\");</script>"),
-            .directory => try html_file_writer.interface.writeAll("<script>addRow(\"index.html\",\"index.html\",0,1409,\"1.4 kB\",1777122411,\"4/25/26, 9:06:51 AM\");</script>"),
+            .file => {
+                try html_file_writer.interface.print("<script>addRow(\"{s}\",\"{s}\",1,69,\"4.0 kB\",7777777,\"88/88/88, 33:33:33 AM\");</script>", .{ entry.name, entry.name });
+            },
+            .directory => {
+                try html_file_writer.interface.print("<script>addRow(\"{s}\",\"{s}\",1,4096,\"4.0 kB\",0,\"99/99/99, 00:00:00 PM\");</script>", .{ entry.name, entry.name });
+            },
             else => continue,
         }
     }

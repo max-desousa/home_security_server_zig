@@ -9,20 +9,14 @@ pub fn generic_getter(
     allocator : std.mem.Allocator,
     stream : *ComplexStream,
 ) void {
+    _ = &allocator;
+
     std.log.debug("I'm in a getter right now...\n", .{});
 
-    if (sysOps.request_is_directory(stream.header_target)) {
-        html.generate_and_serve_directory_html();
+    if (sysOps.request_is_directory(io, stream)) {
+        html.generate_and_serve_directory_html(io, stream);
     }
     else {
         @panic("Todo - what should happen if user selects a file?");
     }
-
-    if (std.mem.eql(u8, stream.header_target, "/")) {
-        home_page.serve(io, allocator, stream);
-    }
-    else {
-    }
 }
-
-

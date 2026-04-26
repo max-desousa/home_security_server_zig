@@ -14,16 +14,19 @@ pub fn build(b: *std.Build) !void {
     const options = b.addOptions();
     options.addOption(usize, "max_threads", option_max_threads);
 
-    const mod_system_ops = b.createModule(.{
-        .root_source_file = b.path("src/systemOps/root_systemOps.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
     const mod_complex_stream = b.createModule(.{
         .root_source_file = b.path("src/global/structs/complexStream/root_complex_stream.zig"),
         .target = target,
         .optimize = optimize,
+    });
+
+    const mod_system_ops = b.createModule(.{
+        .root_source_file = b.path("src/systemOps/root_systemOps.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "complexStream", .module = mod_complex_stream },
+        },
     });
 
     const mod_server_ops = b.createModule(.{

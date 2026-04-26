@@ -29,6 +29,9 @@ backing_buffer_for_target : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([
 header_target : []u8 = undefined,
 header_method : ?std.http.Method = null,
 
+backing_buffer_for_target_filesys_path : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([BUFFER_SIZE_FOR_HEADER_FIELDS]u8),
+target_file_system_path : ?[]u8 = null,
+
 
 //------------------------------ BEGIN METHODS ---------------------------------
 

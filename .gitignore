@@ -6,3 +6,4 @@ config.zap
 .grok/**
 **/*.ts
 **/Archives/**/*
+.html_to_serve.html

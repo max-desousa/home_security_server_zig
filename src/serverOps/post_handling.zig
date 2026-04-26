@@ -74,9 +74,9 @@ fn archive_payload(
         return;
     }
 
-    const folder_status = ensure_directory_exists(io, archive_path) catch {
-        @panic("TODO: handle inability to create folder to house archive files\n");
-    };
+    //const folder_status = ensure_directory_exists(io, archive_path) catch {
+    //    @panic("TODO: handle inability to create folder to house archive files\n");
+    //};
 
     // Trying to create the file descriptor that we'll write/archive to
     const new_file = std.Io.Dir.createFile(.cwd(), io, archive_path, .{}) catch |err| {
@@ -102,14 +102,6 @@ fn archive_payload(
             @panic("Unhandled file writing error\n");
         }
     }
-
-    if (.created == folder_status) {
-        const nullable_path_cut = std.mem.cutLast(u8, archive_path, "/");
-        if (nullable_path_cut) |path_cut| {
-            sysOps.generate_folder_html(io, path_cut.@"0");
-        }
-    }
-    sysOps.generate_folder_html(io, "Archives");
 
     stream.request.respond("", .{ .keep_alive = false }) catch |err| {
         std.log.err("Error: {any}\n", .{ err });
