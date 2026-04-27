@@ -63,8 +63,10 @@ pub fn generate_html_for_folder(
     defer html_file_writer.interface.flush() catch {};
 
     try html_file_writer.interface.writeAll(html_preamble);
-    try html_file_writer.interface.writeAll(path);
-    try html_file_writer.interface.writeAll("\");</script>\n<script>onHasParentDirectory();</script>");
+    try html_file_writer.interface.print("<script>start(\"{s}\");</script>\n", .{ path });
+    if (!std.mem.eql(u8, path, "Archives/")) {
+        try html_file_writer.interface.writeAll("<script>onHasParentDirectory();</script>\n");
+    }
 
     var dir_to_scan = try std.Io.Dir.openDir(
         .cwd(),
@@ -81,18 +83,80 @@ pub fn generate_html_for_folder(
 
     while (dir_iterator.next(io)) |nullable_entry| {
         const entry = nullable_entry orelse break;
+        var backing_buffer_date_modified_string : [254]u8 = undefined;
         switch (entry.kind) {
             .file => {
-                try html_file_writer.interface.print("<script>addRow(\"{s}\",\"{s}\",1,69,\"4.0 kB\",7777777,\"88/88/88, 33:33:33 AM\");</script>", .{ entry.name, entry.name });
+                const file_stat = try std.Io.Dir.statFile(dir_to_scan, io, entry.name, .{});
+                var backing_buffer_file_size_string : [64]u8 = undefined;
+                const file_size_string = try file_bytes_to_abbreviated_string(
+                    file_stat.size, 
+                    &backing_buffer_file_size_string
+                );
+                const time_stamp_string = try timestamp_to_string(file_stat.mtime, &backing_buffer_date_modified_string);
+                try html_file_writer.interface.print("<script>addRow(\"{s}\",\"{s}\",0,{d},\"{s}\",{d},\"{s}\");</script>\n", .{ entry.name, entry.name, file_stat.size, file_size_string, file_stat.mtime.nanoseconds, time_stamp_string });
             },
             .directory => {
-                try html_file_writer.interface.print("<script>addRow(\"{s}\",\"{s}\",1,4096,\"4.0 kB\",0,\"99/99/99, 00:00:00 PM\");</script>", .{ entry.name, entry.name });
+                try html_file_writer.interface.print("<script>addRow(\"{s}\",\"{s}\",1,4096,\"4.0 kB\",0,\"99/99/99, 00:00:00 PM\");</script>\n", .{ entry.name, entry.name });
             },
             else => continue,
         }
     }
     else |err| {
-        std.debug.print("Error iterating over dir during html file generation: {any}\n", .{ err });
+        std.log.err("Error iterating over dir during html file generation: {any}\n", .{ err });
         return err;
     }
+}
+
+
+//******************************************************************************
+//* Function:    
+//*
+//* Description: 
+//******************************************************************************
+fn file_bytes_to_abbreviated_string(bytes : u64, buffer : []u8) ![]const u8 {
+    const units = [_][]const u8{ "B", "KB", "MB", "GB", "TB", "PB" };
+    var value : f64 = @floatFromInt(bytes);
+    var unit_index : usize = 0;
+
+    while ((value >= 1024.0) and 
+           (unit_index < (units.len - 1))) {
+        value /= 1024.0;
+        unit_index += 1;
+    }
+
+    return try std.fmt.bufPrint(buffer, "{d:.2} {s}", .{ value, units[unit_index] });
+}
+
+
+//******************************************************************************
+//* Function:    
+//*
+//* Description: 
+//******************************************************************************
+fn timestamp_to_string(timestamp : std.Io.Timestamp, buffer : []u8) ![]const u8 {
+    const epoch_seconds : std.time.epoch.EpochSeconds = .{ .secs = @intCast(@divTrunc(timestamp.nanoseconds, std.time.ns_per_s)) };
+
+    const epoch_day = epoch_seconds.getEpochDay();
+    const year_and_day = epoch_day.calculateYearDay();
+    const year = year_and_day.year;
+
+    const month_and_day = year_and_day.calculateMonthDay();
+    const day = month_and_day.day_index;
+    const month = month_and_day.month.numeric();
+
+    const day_seconds = epoch_seconds.getDaySeconds();
+
+    //99/99/99, 00:00:00 PM
+    return try std.fmt.bufPrint(
+        buffer,
+        "{d:0>2}/{d:0>2}/{d:0>4}, {d:0>2}:{d:0>2}:{d:0>2}",
+        .{
+            month,
+            day,
+            year,
+            day_seconds.getHoursIntoDay(),
+            day_seconds.getMinutesIntoHour(),
+            day_seconds.getSecondsIntoMinute(),
+        },
+    );
 }

@@ -42,7 +42,8 @@ pub fn generate_and_serve_directory_html(io : std.Io, stream : *ComplexStream) v
     };
     defer file.close(io);
 
-    sysOps.generate_html_for_folder(io, &file, stream.target_file_system_path.?) catch {
+    sysOps.generate_html_for_folder(io, &file, stream.target_file_system_path.?) catch |err| {
+        std.log.err("Failed dir html generation due to error {any}\n", .{ err });
         send_error_state(stream, "Error generating your view of the directory");
     };
 

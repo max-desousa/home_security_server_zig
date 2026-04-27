@@ -17,6 +17,25 @@ pub fn generic_getter(
         html.generate_and_serve_directory_html(io, stream);
     }
     else {
-        @panic("Todo - what should happen if user selects a file?");
+        if (request_is_for_favicon(stream)) {
+            stream.request.respond(
+                "",
+                .{
+                    .status = .no_content,
+                }
+            ) catch {
+                @panic("TODO: What do I do when server fails to reject favicon");
+            };
+        }
+        else {
+            std.log.err("Target causing the error is: {s}\n", .{stream.header_target});
+            @panic("Todo - what should happen if user selects a file?");
+        }
     }
+}
+
+
+fn request_is_for_favicon(stream : *ComplexStream) bool {
+    _, const target = std.mem.cutLast(u8, stream.header_target, "/") orelse return false;
+    return std.mem.eql(u8, target, "favicon.ico");
 }
