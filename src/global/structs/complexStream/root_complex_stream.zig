@@ -29,8 +29,8 @@ backing_buffer_for_target : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([
 header_target : []u8 = undefined,
 header_method : ?std.http.Method = null,
 
-backing_buffer_for_target_filesys_path : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([BUFFER_SIZE_FOR_HEADER_FIELDS]u8),
-target_file_system_path : ?[]u8 = null,
+backing_buffer_for_fs_adjusted_target : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([BUFFER_SIZE_FOR_HEADER_FIELDS]u8),
+fs_adjusted_target : []u8 = undefined,
 
 
 //------------------------------ BEGIN METHODS ---------------------------------
@@ -69,6 +69,20 @@ pub fn setup(
 fn cache_headers(self : *Self) !void {
     self.request = try self.server.receiveHead();
     self.header_method = self.request.head.method;
+    if (1 == self.request.head.target.len) {
+        self.fs_adjusted_target = std.fmt.bufPrint(
+            &self.backing_buffer_for_fs_adjusted_target,
+            ".",
+            .{}
+        ) catch @panic("Problem modifying header request with prepended period (root)");
+    }
+    else {
+        self.fs_adjusted_target = std.fmt.bufPrint(
+            &self.backing_buffer_for_fs_adjusted_target,
+            ".{s}",
+            .{ self.request.head.target }
+        ) catch @panic("Problem modifying header request with prepended period (not root)");
+    }
     @memcpy(self.backing_buffer_for_target[0..self.request.head.target.len], self.request.head.target);
     self.header_target = self.backing_buffer_for_target[0..self.request.head.target.len];
     std.log.debug("Header target is: {s}\n", .{ self.header_target });

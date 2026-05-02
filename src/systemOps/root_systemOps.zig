@@ -30,16 +30,9 @@ pub fn open_static_html(io : std.Io, path : []const u8) !?std.Io.File {
 //* Description: 
 //******************************************************************************
 pub fn request_is_directory(io : std.Io, stream : *ComplexStream) bool {
-    stream.target_file_system_path = std.fmt.bufPrint(
-        &stream.backing_buffer_for_target_filesys_path,
-        "Archives{s}",
-        .{ stream.header_target }
-    ) catch return false;
-    
-    std.Io.Dir.access(.cwd(), io, stream.target_file_system_path.?, .{ .read = true }) catch |err| {
+    std.Io.Dir.access(.cwd(), io, stream.fs_adjusted_target, .{ .read = true }) catch |err| {
         if (error.FileNotFound == err) {
             std.log.debug("request_is_directory returned false for path {s}\n", .{ stream.header_target });
-            stream.target_file_system_path = null;
             return false;
         }
     };
@@ -63,10 +56,11 @@ pub fn generate_html_for_folder(
     defer html_file_writer.interface.flush() catch {};
 
     try html_file_writer.interface.writeAll(html_preamble);
-    try html_file_writer.interface.print("<script>start(\"{s}\");</script>\n", .{ path });
-    if (!std.mem.eql(u8, path, "Archives/")) {
-        try html_file_writer.interface.writeAll("<script>onHasParentDirectory();</script>\n");
-    }
+    try html_file_writer.interface.print("<script>\n", .{});
+    try html_file_writer.interface.print("\tconst currentPath = \"{s}\";\n", .{ path[1..path.len] });
+    try html_file_writer.interface.print("\tstart(currentPath);\n", .{});
+    try html_file_writer.interface.print("\tonHasParentDirectory(currentPath);\n", .{});
+    try html_file_writer.interface.print("</script>\n", .{});
 
     var dir_to_scan = try std.Io.Dir.openDir(
         .cwd(),
