@@ -63,6 +63,7 @@ pub fn generate_html_for_folder(
     try html_file_writer.interface.writeAll(html_preamble);
     try html_file_writer.interface.print("<script>start(\"{s}\");</script>\n", .{ path[1..path.len] });
     try html_file_writer.interface.print("<script>onHasParentDirectory();</script>\n", .{});
+    defer html_file_writer.interface.print("<script>finalizeDirectory();</script>\n", .{}) catch {};
 
     var dir_to_scan = try std.Io.Dir.openDir(
         .cwd(),
@@ -155,4 +156,25 @@ fn timestamp_to_string(timestamp : std.Io.Timestamp, buffer : []u8) ![]const u8 
             day_seconds.getSecondsIntoMinute(),
         },
     );
+}
+
+
+//******************************************************************************
+//* Function:    
+//*
+//* Description: 
+//******************************************************************************
+pub fn generate_playlist_file(io : std.Io, parameter_string : []const u8) !void {
+    //Get directory that is relevant to the request from the header target. 
+    const current_dir, _ = std.mem.cutLast(u8, parameter_string, "/") orelse return error.NoSlashPresent;
+
+    //Open current dir and create array list of all files within the window
+
+    //Sort the array list to populate playlist with file order that produces cohesive video. 
+
+    //Create and write playlist file
+    var backing_buffer_for_playlist_file_path : [512]u8 = undefined;
+    const playlist_file_path = std.fmt.bufPrint(&backing_buffer_for_playlist_file_path, "{s}/.playlist.m3p8", .{ current_dir });
+    var playlist_file = try std.Io.Dir.createFile(.cwd(), io, playlist_file_path, .{});
+    defer playlist_file.close(io);
 }

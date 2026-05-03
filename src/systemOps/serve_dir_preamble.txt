@@ -1,28 +1,31 @@
 <!DOCTYPE html>
-
 <html dir="ltr" lang="en">
-
 <head>
 <meta charset="utf-8">
 <meta name="color-scheme" content="light dark">
 <meta name="google" value="notranslate">
 
 <script>
-function addRow(name, url, isdir,
-    size, size_string, date_modified, date_modified_string) {
+// Global state
+let currentPath = "";
+let hasVideos = false;
 
-  if (name == "." || name == "..")
-    return;
+function isVideoFile(name) {
+  const lower = name.toLowerCase();
+  return lower.endsWith(".ts") || lower.endsWith(".mp4");
+}
+
+// Updated addRow - now also detects videos
+function addRow(name, url, isdir, size, size_string, date_modified, date_modified_string) {
+  if (name === "." || name === "..") return;
 
   var root = document.location.pathname;
-  if (root.substr(-1) !== "/")
-    root += "/";
+  if (root.substr(-1) !== "/") root += "/";
 
   var tbody = document.getElementById("tbody");
   var row = document.createElement("tr");
 
   if (isdir) {
-    // === Directories - keep original simple behavior ===
     name = name + "/";
     url = url + "/";
     size = 0;
@@ -40,23 +43,23 @@ function addRow(name, url, isdir,
     row.appendChild(file_cell);
     row.appendChild(createCell(size, size_string));
     row.appendChild(createCell(date_modified, date_modified_string));
-
   } else {
-    // === Files - show icon + View + Download buttons ===
+    // === Files ===
+    if (isVideoFile(name)) hasVideos = true;
+
     var file_cell = document.createElement("td");
     var link = document.createElement("a");
     link.className = "icon file";
     link.innerText = name;
-    link.href = root + url;           // fallback click = View
+    link.href = root + url;
 
     file_cell.dataset.value = name;
     file_cell.appendChild(link);
 
-    // Actions cell with buttons
+    // Actions cell
     var actions_cell = document.createElement("td");
     actions_cell.style.whiteSpace = "nowrap";
 
-    // View button
     var viewBtn = document.createElement("a");
     viewBtn.href = root + url;
     viewBtn.className = "button";
@@ -64,12 +67,11 @@ function addRow(name, url, isdir,
     viewBtn.style.marginRight = "8px";
     actions_cell.appendChild(viewBtn);
 
-    // Download button
     var dlBtn = document.createElement("a");
     dlBtn.href = root + url;
     dlBtn.className = "button danger";
     dlBtn.innerText = "↓ Download";
-    dlBtn.download = name;                     // forces download
+    dlBtn.download = name;
     actions_cell.appendChild(dlBtn);
 
     row.appendChild(file_cell);
@@ -98,9 +100,9 @@ function createCell(value, text) {
 }
 
 function start(location) {
+  currentPath = location;                     // ← important for playlist URL
   var header = document.getElementById("header");
   header.innerText = header.innerText.replace("LOCATION", location);
-
   document.getElementById("title").innerText = header.innerText;
 }
 
@@ -109,26 +111,60 @@ function onHasParentDirectory() {
   box.style.display = "block";
 
   var root = document.location.pathname;
-  if (!root.endsWith("/"))
-    root += "/";
+  if (!root.endsWith("/")) root += "/";
 
   var link = document.getElementById("parentDirLink");
   link.href = root + "..";
 }
 
-function sortTable(column) {
+// NEW: Video playlist UI
+function initializeVideoPlaylistUI() {
+  if (!hasVideos) return;
+
+  const panel = document.getElementById("videoPlaylistPanel");
+  if (panel) panel.style.display = "block";
+}
+
+function generateM3U8Playlist() {
+  const startInput = document.getElementById("startTime").value;
+  const endInput   = document.getElementById("endTime").value;
+
+  if (!startInput || !endInput) {
+    alert("Please select both Start and End time.");
+    return;
+  }
+
+  // Convert datetime-local (YYYY-MM-DDTHH:MM) → safe format (YYYY-MM-DD_HH-MM)
+  const cleanStart = startInput.replace("T", "_").replace(":", "-");
+  const cleanEnd   = endInput.replace("T", "_").replace(":", "-");
+
+  let url = currentPath;
+  if (!url.endsWith("/")) url += "/";
+
+  url += "?m3u8&start=" + encodeURIComponent(cleanStart) +
+         "&end=" + encodeURIComponent(cleanEnd);
+
+  console.log("Generated playlist URL:", url); // helpful for debugging
+  window.open(url, "_blank");
+}
+
+// Called by the directory generator after all addRow() calls
+function finalizeDirectory() {
+  initializeVideoPlaylistUI();
+}
+
+// Existing table sorting
+function sortTable(column) { /* unchanged - keep your original sortTable */ 
   var theader = document.getElementById("theader");
   var oldOrder = theader.cells[column].dataset.order || '1';
-  oldOrder = parseInt(oldOrder, 10)
+  oldOrder = parseInt(oldOrder, 10);
   var newOrder = 0 - oldOrder;
   theader.cells[column].dataset.order = newOrder;
 
   var tbody = document.getElementById("tbody");
   var rows = tbody.rows;
   var list = [], i;
-  for (i = 0; i < rows.length; i++) {
-    list.push(rows[i]);
-  }
+  for (i = 0; i < rows.length; i++) list.push(rows[i]);
 
   list.sort(function(row1, row2) {
     var a = row1.cells[column].dataset.value;
@@ -138,7 +174,6 @@ function sortTable(column) {
       b = parseInt(b, 10);
       return a > b ? newOrder : a < b ? oldOrder : 0;
     }
-
     if (a > b) return newOrder;
     if (a < b) return oldOrder;
     return 0;
@@ -169,52 +204,47 @@ window.addEventListener('DOMContentLoaded', onLoad);
 </script>
 
 <style>
+  /* Your existing styles + small additions for the new panel */
   h1 { border-bottom: 1px solid #c0c0c0; margin-bottom: 10px; padding-bottom: 10px; white-space: nowrap; }
-
   table { border-collapse: collapse; }
   th { cursor: pointer; }
-
-  td.detailsColumn {
-    padding-inline-start: 2em;
-    text-align: end;
-    white-space: nowrap;
-  }
-
-  a.icon {
-    padding-inline-start: 1.5em;
-    text-decoration: none;
-    user-select: auto;
-  }
+  td.detailsColumn { padding-inline-start: 2em; text-align: end; white-space: nowrap; }
+  a.icon { padding-inline-start: 1.5em; text-decoration: none; user-select: auto; }
   a.icon:hover { text-decoration: underline; }
-
-  .button {
-    display: inline-block;
-    padding: 4px 10px;
-    margin: 2px;
-    background: #0066cc;
-    color: white;
-    text-decoration: none;
-    border-radius: 4px;
-    font-size: 13px;
-  }
+  .button { display: inline-block; padding: 4px 10px; margin: 2px; background: #0066cc; color: white; text-decoration: none; border-radius: 4px; font-size: 13px; }
   .button:hover { background: #0052a3; }
   .danger { background: #c0392b; }
   .danger:hover { background: #a93226; }
 
-  a.file {
-    background : url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAABnRSTlMAAAAAAABupgeRAAABEElEQVR42nRRx3HDMBC846AHZ7sP54BmWAyrsP588qnwlhqw/k4v5ZwWxM1hzmGRgV1cYqrRarXoH2w2m6qqiqKIR6cPtzc3xMSML2Te7XZZlnW7Pe/91/dX47WRBHuA9oyGmRknzGDjab1ePzw8bLfb6WRalmW4ip9FDVpYSWZgOp12Oh3nXJ7nxoJSGEciteP9y+fH52q1euv38WosqA6T2gGOT44vry7BEQtJkMAMMpa6JagAMcUfWYa4hkkzAc7fFlSjwqCoOUYAF5RjHZPVCFBOtSBGfgUDji3c3jpibeEMQhIMh8NwshqyRsBJgvF4jMs/YlVR5KhgNpuBLzk0OcUiR3CMhcPaOzsZiAAA/AjmaB3WZIkAAAAASUVORK5CYII=") left top no-repeat;
+  /* New playlist panel styling */
+  #videoPlaylistPanel {
+    margin: 20px 0;
+    padding: 20px;
+    background: #f0f8ff;
+    border: 2px solid #0066cc;
+    border-radius: 8px;
+    font-family: system-ui, -apple-system, sans-serif;
   }
-
-  a.dir {
-    background : url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABt0lEQVR42oxStZoWQRCs2cXdHTLcHZ6EjAwnQWIkJyQlRt4Cd3d3d1n5d7q7ju1zv/q+mh6taQsk8fn29kPDRo87SDMQcNAUJgIQkBjdAoRKdXjm2mOH0AqS+PlkP8sfp0h93iu/PDji9s2FzSSJVg5ykZqWgfGRr9rAAAQiDFoB1OfyESZEB7iAI0lHwLREQBcQQKqo8p+gNUCguwCNAAUQAcFOb0NNGjT+BbUC2YsHZpWLhC6/m0chqIoM1LKbQIIBwlTQE1xAo9QDGDPYf6rkTpPc92gCUYVJAZjhyZltJ95f3zuvLYRGWWCUNkDL2333McBh4kaLlxg+aTmyL7c2xTjkN4Bt7oE3DBP/3SRz65R/bkmBRPGzcRNHYuzMjaj+fdnaFoJUEdTSXfaHbe7XNnMPyqryPcmfY+zURaAB7SHk9cXSH4fQ5rojgCAVIuqCNWgRhLYLhJB4k3iZfIPtnQiCpjAzeBIRXMA6emAqoEbQSoDdGxFUrxS1AYcpaNbBgyQBGJEOnYOeENKR/iAd1npusI4C75/c3539+nbUjOgZV5CkAU27df40lH+agUdIuA/EAgDmZnwZlhDc0wAAAABJRU5ErkJggg==") left top no-repeat;
+  #videoPlaylistPanel h2 { margin-top: 0; color: #0066cc; }
+  .time-picker { display: flex; gap: 20px; flex-wrap: wrap; align-items: end; margin: 15px 0; }
+  .time-picker label { font-weight: 600; }
+  .time-picker input { padding: 8px 12px; font-size: 15px; border-radius: 4px; border: 1px solid #ccc; }
+  .generate-btn {
+    background: #28a745;
+    color: white;
+    padding: 10px 20px;
+    font-size: 15px;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
   }
+  .generate-btn:hover { background: #218838; }
 
-  a.up {
-    background : url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACM0lEQVR42myTA+w1RxRHz+zftmrbdlTbtq04qRGrCmvbDWp9tq3a7tPcub8mj9XZ3eHOGQdJAHw77/LbZuvnWy+c/CIAd+91CMf3bo+bgcBiBAGIZKXb19/zodsAkFT+3px+ssYfyHTQW5tr05dCOf3xN49KaVX9+2zy1dX4XMk+5JflN5MBPL30oVsvnvEyp+18Nt3ZAErQMSFOfelCFvw0HcUloDayljZkX+MmamTAMTe+d+ltZ+1wEaRAX/MAnkJdcujzZyErIiVSzCEvIiq4O83AG7LAkwsfIgAnbncag82jfPPdd9RQyhPkpNJvKJWQBKlYFmQA315n4YPNjwMAZYy0TgAweedLmLzTJSTLIxkWDaVCVfAbbiKjytgmm+EGpMBYW0WwwbZ7lL8anox/UxekaOW544HO0ANAshxuORT/RG5YSrjlwZ3lM955tlQqbtVMlWIhjwzkAVFB8Q9EAAA3AFJ+DR3DO/Pnd3NPi7H117rAzWjpEs8vfIqsGZpaweOfEAAFJKuM0v6kf2iC5pZ9+fmLSZfWBVaKfLLNOXj6lYY0V2lfyVCIsVzmcRV9Y0fx02eTaEwhl2PDrXcjFdYRAohQmS8QEFLCLKGYA0AeEakhCCFDXqxsE0AQACgAQp5w96o0lAXuNASeDKWIvADiHwigfBINpWKtAXJvCEKWgSJNbRvxf4SmrnKDpvZavePu1K/zu/due1X/6Nj90MBd/J2Cic7WjBp/jUdIuA8AUtd65M+PzXIAAAAASUVORK5CYII=") left top no-repeat;
-  }
-
+  a.file { background: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAABnRSTlMAAAAAAABupgeRAAABEElEQVR42nRRx3HDMBC846AHZ7sP54BmWAyrsP588qnwlhqw/k4v5ZwWxM1hzmGRgV1cYqrRarXoH2w2m6qqiqKIR6cPtzc3xMSML2Te7XZZlnW7Pe/91/dX47WRBHuA9oyGmRknzGDjab1ePzw8bLfb6WRalmW4ip9FDVpYSWZgOp12Oh3nXJ7nxoJSGEciteP9y+fH52q1euv38WosqA6T2gGOT44vry7BEQtJkMAMMpa6JagAMcUfWYa4hkkzAc7fFlSjwqCoOUYAF5RjHZPVCFBOtSBGfgUDji3c3jpibeEMQhIMh8NwshqyRsBJgvF4jMs/YlVR5KhgNpuBLzk0OcUiR3CMhcPaOzsZiAAA/AjmaB3WZIkAAAAASUVORK5CYII=") left top no-repeat; }
+  a.dir { background: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABt0lEQVR42oxStZoWQRCs2cXdHTLcHZ6EjAwnQWIkJyQlRt4Cd3d3d1n5d7q7ju1zv/q+mh6taQsk8fn29kPDRo87SDMQcNAUJgIQkBjdAoRKdXjm2mOH0AqS+PlkP8sfp0h93iu/PDji9s2FzSSJVg5ykZqWgfGRr9rAAAQiDFoB1OfyESZEB7iAI0lHwLREQBcQQKqo8p+gNUCguwCNAAUQAcFOb0NNGjT+BbUC2YsHZpWLhC6/m0chqIoM1LKbQIIBwlTQE1xAo9QDGDPYf6rkTpPc92gCUYVJAZjhyZltJ95f3zuvLYRGWWCUNkDL2333McBh4kaLlxg+aTmyL7c2xTjkN4Bt7oE3DBP/3SRz65R/bkmBRPGzcRNHYuzMjaj+fdnaFoJUEdTSXfaHbe7XNnMPyqryPcmfY+zURaAB7SHk9cXSH4fQ5rojgCAVIuqCNWgRhLYLhJB4k3iZfIPtnQiCpjAzeBIRXMA6emAqoEbQSoDdGxFUrxS1AYcpaNbBgyQBGJEOnYOeENKR/iAd1npusI4C75/c3539+nbUjOgZV5CkAU27df40lH+agUdIuA/EAgDmZnwZlhDc0wAAAABJRU5ErkJggg==") left top no-repeat; }
+  a.up { background: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACM0lEQVR42myTA+w1RxRHz+zftmrbdlTbtq04qRGrCmvbDWp9tq3a7tPcub8mj9XZ3eHOGQdJAHw77/LbZuvnWy+c/CIAd+91CMf3bo+bgcBiBAGIZKXb19/zodsAkFT+3px+ssYfyHTQW5tr05dCOf3xN49KaVX9+2zy1dX4XMk+5JflN5MBPL30oVsvnvEyp+18Nt3ZAErQMSFOfelCFvw0HcUloDayljZkX+MmamTAMTe+d+ltZ+1wEaRAX/MAnkJdcujzZyErIiVSzCEvIiq4O83AG7LAkwsfIgAnbncag82jfPPdd9RQyhPkpNJvKJWQBKlYFmQA315n4YPNjwMAZYy0TgAweedLmLzTJSTLIxkWDaVCVfAbbiKjytgmm+EGpMBYW0WwwbZ7lL8anox/UxekaOW544HO0ANAshxuORT/RG5YSrjlwZ3lM955tlQqbtVMlWIhjwzkAVFB8Q9EAAA3AFJ+DR3DO/Pnd3NPi7H117rAzWjpEs8vfIqsGZpaweOfEAAFJKuM0v6kf2iC5pZ9+fmLSZfWBVaKfLLNOXj6lYY0V2lfyVCIsVzmcRV9Y0fx02eTaEwhl2PDrXcjFdYRAohQmS8QEFLCLKGYA0AeEakhCCFDXqxsE0AQACgAQp5w96o0lAXuNASeDKWIvADiHwigfBINpWKtAXJvCEKWgSJNbRvxf4SmrnKDpvZavePu1K/zu/due1X/6Nj90MBd/J2Cic7WjBp/jUdIuA8AUtd65M+PzXIAAAAASUVORK5CYII=") left top no-repeat; }
   html[dir=rtl] a { background-position-x: right; }
-
   #parentDirLinkBox { margin-bottom: 10px; padding-bottom: 10px; }
 </style>
 
@@ -231,11 +261,31 @@ window.addEventListener('DOMContentLoaded', onLoad);
   </a>
 </div>
 
+<!-- NEW: Video Playlist Generator Panel -->
+<div id="videoPlaylistPanel" style="display: none;">
+  <h2>🎥 Generate HLS Playlist (m3u8)</h2>
+  <p><strong>This folder contains video archives.</strong> Select a time range below to create a playable playlist.</p>
+  
+  <div class="time-picker">
+    <div>
+      <label for="startTime">Start Time</label><br>
+      <input type="datetime-local" id="startTime">
+    </div>
+    <div>
+      <label for="endTime">End Time</label><br>
+      <input type="datetime-local" id="endTime">
+    </div>
+    <div>
+      <button onclick="generateM3U8Playlist()" class="generate-btn">Generate m3u8 Playlist</button>
+    </div>
+  </div>
+</div>
+
 <table>
   <thead>
     <tr class="header" id="theader">
       <th id="nameColumnHeader" tabindex=0 role="button">Name</th>
-      <th>Actions</th>   <!-- New column -->
+      <th>Actions</th>
       <th id="sizeColumnHeader" class="detailsColumn" tabindex=0 role="button">Size</th>
       <th id="dateColumnHeader" class="detailsColumn" tabindex=0 role="button">Date Modified</th>
     </tr>
