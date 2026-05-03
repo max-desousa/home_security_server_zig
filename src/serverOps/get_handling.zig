@@ -18,6 +18,7 @@ pub fn generic_getter(
     }
     else {
         if (request_is_for_favicon(stream)) {
+            std.log.debug("Handling a favicon request\n", .{});
             stream.request.respond(
                 "",
                 .{
@@ -28,8 +29,14 @@ pub fn generic_getter(
             };
         }
         else {
-            std.log.err("Target causing the error is: {s}\n", .{stream.header_target});
-            @panic("Todo - what should happen if user selects a file?");
+            stream.request.respond(
+                "",
+                .{
+                    .status = .not_implemented,
+                }
+            ) catch {
+                @panic("TODO: What do I do when server fails to send \"not implemented\" status code.");
+            };
         }
     }
 }

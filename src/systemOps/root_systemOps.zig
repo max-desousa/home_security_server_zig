@@ -56,11 +56,8 @@ pub fn generate_html_for_folder(
     defer html_file_writer.interface.flush() catch {};
 
     try html_file_writer.interface.writeAll(html_preamble);
-    try html_file_writer.interface.print("<script>\n", .{});
-    try html_file_writer.interface.print("\tconst currentPath = \"{s}\";\n", .{ path[1..path.len] });
-    try html_file_writer.interface.print("\tstart(currentPath);\n", .{});
-    try html_file_writer.interface.print("\tonHasParentDirectory(currentPath);\n", .{});
-    try html_file_writer.interface.print("</script>\n", .{});
+    try html_file_writer.interface.print("<script>start(\"{s}\");</script>\n", .{ path[1..path.len] });
+    try html_file_writer.interface.print("<script>onHasParentDirectory();</script>\n", .{});
 
     var dir_to_scan = try std.Io.Dir.openDir(
         .cwd(),

@@ -61,6 +61,11 @@ fn serve_file_2(io : std.Io, stream : *ComplexStream, file : *std.Io.File) void 
     var body_writer = stream.request.respondStreaming(
         &backing_buffer_for_response,
         .{
+            .respond_options = .{
+                .extra_headers = &.{
+                    .{ .name = "Content-Type", .value = "text/html; charset=utf-8" },
+                },
+            },
         },
     ) catch |err| {
         std.debug.print("Error: \"{any}\" occurred when attempting to respond to the client", .{ err });

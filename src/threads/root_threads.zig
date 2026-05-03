@@ -145,6 +145,7 @@ pub fn connection_router(
         };
         //Handle acceptance of a stream.
         if (queue.getOne(io)) |stream| {
+            defer stream.close(io);
             std.debug.print("Processing new stream on thread {d}\n", .{ thread_num });
 
             var buffer_for_reading : [STREAM_BUFF_SIZE]u8 = undefined;

@@ -69,52 +69,17 @@ function start(location) {
   document.getElementById("title").innerText = header.innerText;
 }
 
-<!--
-function onHasParentDirectory(currentPath = null) {
-  const box = document.getElementById("parentDirLinkBox");
+
+function onHasParentDirectory() {
+  var box = document.getElementById("parentDirLinkBox");
   box.style.display = "block";
 
-  let path = currentPath || document.location.pathname;
+  var root = document.location.pathname;
+  if (!root.endsWith("/"))
+    root += "/";
 
-  if (!path.endsWith('/')) path += '/';
-
-  const parts = path.split('/').filter(p => p.length > 0);
-  
-  if (parts.length > 0) {
-    parts.pop();
-  }
-
-  const parentPath = '/' + parts.join('/') + '/';
-
-  document.getElementById("parentDirLink").href = parentPath;
-}
--->
-
-function onHasParentDirectory(currentPath = null) {
-  const box = document.getElementById("parentDirLinkBox");
-  box.style.display = "block";
-
-  let path = currentPath || document.location.pathname;
-  if (!path.endsWith('/')) path += '/';
-
-  const parts = path.split('/').filter(p => p.length > 0);
-  
-  if (parts.length > 0) {
-    parts.pop();
-  }
-
-  let parentPath = '/' + parts.join('/') + '/';
-
-  // Force root to be clean
-  if (parentPath === '//' || parentPath === '///') {
-    parentPath = '/';
-  }
-
-  console.log("Current path :", path);
-  console.log("Parts        :", parts);
-  console.log("Parent href  :", parentPath);
-
-  document.getElementById("parentDirLink").href = parentPath;
+  var link = document.getElementById("parentDirLink");
+  link.href = root + "..";
 }
 
 
