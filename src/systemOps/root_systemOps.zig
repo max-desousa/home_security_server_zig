@@ -30,12 +30,17 @@ pub fn open_static_html(io : std.Io, path : []const u8) !?std.Io.File {
 //* Description: 
 //******************************************************************************
 pub fn request_is_directory(io : std.Io, stream : *ComplexStream) bool {
-    std.Io.Dir.access(.cwd(), io, stream.fs_adjusted_target, .{ .read = true }) catch |err| {
-        if (error.FileNotFound == err) {
+    const dir = std.Io.Dir.openDir(.cwd(), io, stream.fs_adjusted_target, .{}) catch |err| {
+        if ((error.FileNotFound == err) or (error.NotDir == err)) {
             std.log.debug("request_is_directory returned false for path {s}\n", .{ stream.header_target });
             return false;
         }
+        else {
+            std.log.info("We're making this request as NOT a dir. Need to consider error: {any} for different evaluation if this is wrong", .{ err });
+            return false;
+        }
     };
+    defer dir.close(io);
     std.log.debug("request_is_directory returned true for path {s}\n", .{ stream.header_target });
     return true;
 }

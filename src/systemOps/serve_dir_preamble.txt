@@ -10,6 +10,7 @@
 <script>
 function addRow(name, url, isdir,
     size, size_string, date_modified, date_modified_string) {
+
   if (name == "." || name == "..")
     return;
 
@@ -19,29 +20,63 @@ function addRow(name, url, isdir,
 
   var tbody = document.getElementById("tbody");
   var row = document.createElement("tr");
-  var file_cell = document.createElement("td");
-  var link = document.createElement("a");
-
-  link.className = isdir ? "icon dir" : "icon file";
 
   if (isdir) {
+    // === Directories - keep original simple behavior ===
     name = name + "/";
     url = url + "/";
     size = 0;
     size_string = "";
+
+    var file_cell = document.createElement("td");
+    var link = document.createElement("a");
+    link.className = "icon dir";
+    link.innerText = name;
+    link.href = root + url;
+
+    file_cell.dataset.value = name;
+    file_cell.appendChild(link);
+
+    row.appendChild(file_cell);
+    row.appendChild(createCell(size, size_string));
+    row.appendChild(createCell(date_modified, date_modified_string));
+
   } else {
-    link.draggable = "true";
-    link.addEventListener("dragstart", onDragStart, false);
+    // === Files - show icon + View + Download buttons ===
+    var file_cell = document.createElement("td");
+    var link = document.createElement("a");
+    link.className = "icon file";
+    link.innerText = name;
+    link.href = root + url;           // fallback click = View
+
+    file_cell.dataset.value = name;
+    file_cell.appendChild(link);
+
+    // Actions cell with buttons
+    var actions_cell = document.createElement("td");
+    actions_cell.style.whiteSpace = "nowrap";
+
+    // View button
+    var viewBtn = document.createElement("a");
+    viewBtn.href = root + url;
+    viewBtn.className = "button";
+    viewBtn.innerText = "▶ View";
+    viewBtn.style.marginRight = "8px";
+    actions_cell.appendChild(viewBtn);
+
+    // Download button
+    var dlBtn = document.createElement("a");
+    dlBtn.href = root + url;
+    dlBtn.className = "button danger";
+    dlBtn.innerText = "↓ Download";
+    dlBtn.download = name;                     // forces download
+    actions_cell.appendChild(dlBtn);
+
+    row.appendChild(file_cell);
+    row.appendChild(actions_cell);
+    row.appendChild(createCell(size, size_string));
+    row.appendChild(createCell(date_modified, date_modified_string));
   }
-  link.innerText = name;
-  link.href = root + url;
-
-  file_cell.dataset.value = name;
-  file_cell.appendChild(link);
-
-  row.appendChild(file_cell);
-  row.appendChild(createCell(size, size_string));
-  row.appendChild(createCell(date_modified, date_modified_string));
 
   tbody.appendChild(row);
 }
@@ -69,7 +104,6 @@ function start(location) {
   document.getElementById("title").innerText = header.innerText;
 }
 
-
 function onHasParentDirectory() {
   var box = document.getElementById("parentDirLinkBox");
   box.style.display = "block";
@@ -81,7 +115,6 @@ function onHasParentDirectory() {
   var link = document.getElementById("parentDirLink");
   link.href = root + "..";
 }
-
 
 function sortTable(column) {
   var theader = document.getElementById("theader");
@@ -106,21 +139,16 @@ function sortTable(column) {
       return a > b ? newOrder : a < b ? oldOrder : 0;
     }
 
-    // Column 0 is text.
-    if (a > b)
-      return newOrder;
-    if (a < b)
-      return oldOrder;
+    if (a > b) return newOrder;
+    if (a < b) return oldOrder;
     return 0;
   });
 
-  // Appending an existing child again just moves it.
   for (i = 0; i < list.length; i++) {
     tbody.appendChild(list[i]);
   }
 }
 
-// Add event handlers to column headers.
 function addHandlers(element, column) {
   element.onclick = (e) => sortTable(column);
   element.onkeydown = (e) => {
@@ -141,21 +169,10 @@ window.addEventListener('DOMContentLoaded', onLoad);
 </script>
 
 <style>
+  h1 { border-bottom: 1px solid #c0c0c0; margin-bottom: 10px; padding-bottom: 10px; white-space: nowrap; }
 
-  h1 {
-    border-bottom: 1px solid #c0c0c0;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    white-space: nowrap;
-  }
-
-  table {
-    border-collapse: collapse;
-  }
-
-  th {
-    cursor: pointer;
-  }
+  table { border-collapse: collapse; }
+  th { cursor: pointer; }
 
   td.detailsColumn {
     padding-inline-start: 2em;
@@ -168,10 +185,21 @@ window.addEventListener('DOMContentLoaded', onLoad);
     text-decoration: none;
     user-select: auto;
   }
+  a.icon:hover { text-decoration: underline; }
 
-  a.icon:hover {
-    text-decoration: underline;
+  .button {
+    display: inline-block;
+    padding: 4px 10px;
+    margin: 2px;
+    background: #0066cc;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 13px;
   }
+  .button:hover { background: #0052a3; }
+  .danger { background: #c0392b; }
+  .danger:hover { background: #a93226; }
 
   a.file {
     background : url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAABnRSTlMAAAAAAABupgeRAAABEElEQVR42nRRx3HDMBC846AHZ7sP54BmWAyrsP588qnwlhqw/k4v5ZwWxM1hzmGRgV1cYqrRarXoH2w2m6qqiqKIR6cPtzc3xMSML2Te7XZZlnW7Pe/91/dX47WRBHuA9oyGmRknzGDjab1ePzw8bLfb6WRalmW4ip9FDVpYSWZgOp12Oh3nXJ7nxoJSGEciteP9y+fH52q1euv38WosqA6T2gGOT44vry7BEQtJkMAMMpa6JagAMcUfWYa4hkkzAc7fFlSjwqCoOUYAF5RjHZPVCFBOtSBGfgUDji3c3jpibeEMQhIMh8NwshqyRsBJgvF4jMs/YlVR5KhgNpuBLzk0OcUiR3CMhcPaOzsZiAAA/AjmaB3WZIkAAAAASUVORK5CYII=") left top no-repeat;
@@ -185,18 +213,12 @@ window.addEventListener('DOMContentLoaded', onLoad);
     background : url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACM0lEQVR42myTA+w1RxRHz+zftmrbdlTbtq04qRGrCmvbDWp9tq3a7tPcub8mj9XZ3eHOGQdJAHw77/LbZuvnWy+c/CIAd+91CMf3bo+bgcBiBAGIZKXb19/zodsAkFT+3px+ssYfyHTQW5tr05dCOf3xN49KaVX9+2zy1dX4XMk+5JflN5MBPL30oVsvnvEyp+18Nt3ZAErQMSFOfelCFvw0HcUloDayljZkX+MmamTAMTe+d+ltZ+1wEaRAX/MAnkJdcujzZyErIiVSzCEvIiq4O83AG7LAkwsfIgAnbncag82jfPPdd9RQyhPkpNJvKJWQBKlYFmQA315n4YPNjwMAZYy0TgAweedLmLzTJSTLIxkWDaVCVfAbbiKjytgmm+EGpMBYW0WwwbZ7lL8anox/UxekaOW544HO0ANAshxuORT/RG5YSrjlwZ3lM955tlQqbtVMlWIhjwzkAVFB8Q9EAAA3AFJ+DR3DO/Pnd3NPi7H117rAzWjpEs8vfIqsGZpaweOfEAAFJKuM0v6kf2iC5pZ9+fmLSZfWBVaKfLLNOXj6lYY0V2lfyVCIsVzmcRV9Y0fx02eTaEwhl2PDrXcjFdYRAohQmS8QEFLCLKGYA0AeEakhCCFDXqxsE0AQACgAQp5w96o0lAXuNASeDKWIvADiHwigfBINpWKtAXJvCEKWgSJNbRvxf4SmrnKDpvZavePu1K/zu/due1X/6Nj90MBd/J2Cic7WjBp/jUdIuA8AUtd65M+PzXIAAAAASUVORK5CYII=") left top no-repeat;
   }
 
-  html[dir=rtl] a {
-    background-position-x: right;
-  }
+  html[dir=rtl] a { background-position-x: right; }
 
-  #parentDirLinkBox {
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-  }
+  #parentDirLinkBox { margin-bottom: 10px; padding-bottom: 10px; }
 </style>
 
 <title id="title"></title>
-
 </head>
 
 <body>
@@ -213,22 +235,13 @@ window.addEventListener('DOMContentLoaded', onLoad);
   <thead>
     <tr class="header" id="theader">
       <th id="nameColumnHeader" tabindex=0 role="button">Name</th>
-      <th id="sizeColumnHeader" class="detailsColumn" tabindex=0 role="button">
-        Size
-      </th>
-      <th id="dateColumnHeader" class="detailsColumn" tabindex=0 role="button">
-        Date Modified
-      </th>
+      <th>Actions</th>   <!-- New column -->
+      <th id="sizeColumnHeader" class="detailsColumn" tabindex=0 role="button">Size</th>
+      <th id="dateColumnHeader" class="detailsColumn" tabindex=0 role="button">Date Modified</th>
     </tr>
   </thead>
-  <tbody id="tbody">
-  </tbody>
+  <tbody id="tbody"></tbody>
 </table>
 
 </body>
-
 </html>
-<script>// Copyright 2012 The Chromium Authors
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-"use strict";var loadTimeData;class LoadTimeData{constructor(){this.data_=null}set data(value){expect(!this.data_,"Re-setting data.");this.data_=value}valueExists(id){return id in this.data_}getValue(id){expect(this.data_,"No data. Did you remember to include strings.js?");const value=this.data_[id];expect(typeof value!=="undefined","Could not find value for "+id);return value}getString(id){const value=this.getValue(id);expectIsType(id,value,"string");return value}getStringF(id,var_args){const value=this.getString(id);if(!value){return""}const args=Array.prototype.slice.call(arguments);args[0]=value;return this.substituteString.apply(this,args)}substituteString(label,var_args){const varArgs=arguments;return label.replace(/\$(.|$|\n)/g,(function(m){expect(m.match(/\$[$1-9]/),"Unescaped $ found in localized string.");return m==="$$"?"$":varArgs[m[1]]}))}getBoolean(id){const value=this.getValue(id);expectIsType(id,value,"boolean");return value}getInteger(id){const value=this.getValue(id);expectIsType(id,value,"number");expect(value===Math.floor(value),"Number isn't integer: "+value);return value}overrideValues(replacements){expect(typeof replacements==="object","Replacements must be a dictionary object.");for(const key in replacements){this.data_[key]=replacements[key]}}}function expect(condition,message){if(!condition){throw new Error("Unexpected condition on "+document.location.href+": "+message)}}function expectIsType(id,value,type){expect(typeof value===type,"["+value+"] ("+id+") is not a "+type)}expect(!loadTimeData,"should only include this file once");loadTimeData=new LoadTimeData;window.loadTimeData=loadTimeData;console.warn("crbug/1173575, non-JS module files deprecated.");</script><script>loadTimeData.data = {"header":"Index of LOCATION","headerDateModified":"Date Modified","headerName":"Name","headerSize":"Size","language":"en","parentDirText":"[parent directory]","textdirection":"ltr"};</script>

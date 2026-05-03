@@ -29,14 +29,19 @@ pub fn generic_getter(
             };
         }
         else {
-            stream.request.respond(
-                "",
-                .{
-                    .status = .not_implemented,
-                }
-            ) catch {
-                @panic("TODO: What do I do when server fails to send \"not implemented\" status code.");
-            };
+            //var file = std.Io.Dir.openFile(.cwd(), io, stream.fs_adjusted_target, .{}) catch |err| {
+            //    std.log.err("Could not open file to stream due to: {any}\n", .{ err });
+            //    var backing_buffer_for_error_string : [1024]u8 = undefined;
+            //    const full_error_string = std.fmt.bufPrint(&backing_buffer_for_error_string, "Could not serve file to client due to client side error \"{any}\" when trying to open the file.", .{ err }) catch |err_string| {
+            //        std.log.err("Error creating error string: {any}\n", .{ err_string });
+            //        @panic("Look into error in creating error string.");
+            //    };
+            //    html.send_error_state(stream, full_error_string);
+            //    return;
+            //};
+            var file = std.Io.Dir.openFile(.cwd(), io, "playlist.m3u8", .{}) catch unreachable;
+            defer file.close(io);
+            html.serve_file_2(io, stream, &file, "application/vnd.apple.mpegurl");
         }
     }
 }

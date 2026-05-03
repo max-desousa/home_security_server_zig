@@ -47,7 +47,7 @@ pub fn generate_and_serve_directory_html(io : std.Io, stream : *ComplexStream) v
         send_error_state(stream, "Error generating your view of the directory");
     };
 
-    serve_file_2(io, stream, &file);
+    serve_file_2(io, stream, &file, "text/html; charset=utf-8");
 }
 
 
@@ -56,14 +56,20 @@ pub fn generate_and_serve_directory_html(io : std.Io, stream : *ComplexStream) v
 //*
 //* Description: 
 //******************************************************************************
-fn serve_file_2(io : std.Io, stream : *ComplexStream, file : *std.Io.File) void {
+pub fn serve_file_2(
+    io : std.Io,
+    stream : *ComplexStream,
+    file : *std.Io.File,
+    content_type : []const u8
+) void {
     var backing_buffer_for_response : [1024]u8 = undefined;
     var body_writer = stream.request.respondStreaming(
         &backing_buffer_for_response,
         .{
             .respond_options = .{
                 .extra_headers = &.{
-                    .{ .name = "Content-Type", .value = "text/html; charset=utf-8" },
+                    //.{ .name = "Content-Type", .value = "text/html; charset=utf-8" },
+                    .{ .name = "Content-Type", .value = content_type },
                 },
             },
         },
