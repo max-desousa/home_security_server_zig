@@ -14,8 +14,6 @@ pub fn generic_getter(
     allocator : std.mem.Allocator,
     stream : *ComplexStream,
 ) void {
-    _ = &allocator;
-
     std.log.debug("I'm in a getter right now...\n", .{});
 
     if (sysOps.request_is_directory(io, stream)) {
@@ -35,9 +33,24 @@ pub fn generic_getter(
         }
         else {
             if (is_playlist_request(stream)) {
-                const file = sysOps.generate_playlist_file(stream.header_target) catch return;
+                var file = sysOps.generate_and_get_playlist_file(
+                    io, 
+                    allocator, 
+                    stream.header_target
+                ) catch |err| {
+                    std.log.err("Encountered error creating playlist file: {any}\n", .{ err });
+                    return;
+                };
                 defer file.close(io);
-                html.serve_file_2(io, stream, file, "application/vnd.apple.mpegurl");
+                //stream.request.respond(
+                //    "",
+                //    .{
+                //        .status = .no_content,
+                //    }
+                //) catch {
+                //    @panic("TODO: What do I do when server fails to reject favicon");
+                //};
+                html.serve_file_2(io, stream, &file, "application/vnd.apple.mpegurl");
             }
         }
     }

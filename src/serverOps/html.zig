@@ -79,10 +79,38 @@ pub fn serve_file_2(
     };
     defer body_writer.end() catch {};
 
-    var backing_buffer_for_reader : [1024]u8 = undefined;
+    var backing_buffer_for_reader : [1024]u8 = std.mem.zeroes([1024]u8);
     var file_reader = file.reader(io, &backing_buffer_for_reader);
 
-    _ = file_reader.interface.streamRemaining(&body_writer.writer) catch {};
+    //_ = file_reader.interface.streamRemaining(&body_writer.writer) catch {};
+    //std.log.debug("Flushing the body writer...\n", .{});
+    //body_writer.flush() catch |err| {
+    //    std.log.err("There was an error flushing the body writer: {any}\n", .{ err });
+    //};
+    //body_writer.endChunked(.{}) catch |err| {
+    //    std.log.err("There was an issue ending the chunked transfer: {any}\n", .{ err });
+    //};
+
+    if (file_reader.atEnd()) {
+        std.log.err("My Reader indicates that we are at the end of the file\n", .{});
+    }
+    else {
+        std.log.debug("Not at end of file. The position of the reader before starting is: {d}\n", .{ file_reader.pos });
+    }
+    while (true) {
+        file_reader.interface.fillMore() catch |err| {
+            std.log.err("Error reading from file: {any}\n", .{ err });
+            break;
+        };
+        std.log.debug("We did read at least once successfully\n", .{});
+
+        if (0 == file_reader.interface.buffer.len) break;
+
+        body_writer.writer.writeAll(backing_buffer_for_reader[0..file_reader.interface.bufferedLen()]) catch |err| {
+            std.log.err("Error writing to stream: {any}\n", .{ err });
+            break;
+        };
+    }
 }
 
 

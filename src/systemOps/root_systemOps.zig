@@ -1,6 +1,6 @@
 const std = @import("std");
-const html_preamble = @embedFile("serve_dir_preamble.txt");
 const ComplexStream = @import("complexStream");
+const html_preamble = @embedFile("serve_dir_preamble.txt");
 
 pub fn open_static_html(io : std.Io, path : []const u8) !?std.Io.File {
     var path_buffer : [512]u8 = std.mem.zeroes([512]u8);
@@ -163,18 +163,159 @@ fn timestamp_to_string(timestamp : std.Io.Timestamp, buffer : []u8) ![]const u8 
 //* Function:    
 //*
 //* Description: 
+//*
+//* Info: The current form of the string that would be passed to the function is:
+//  "/Archives/NewCamera_2527704881/?m3u8&start=20251207_1022&end=20251213_1022"
+//
+//  It points to:
+//    - Archives (all playlist requests *should* be from archives)
+//    - The camera name we're querying
+//    - The start and end point of the duration we're looking to serve. 
 //******************************************************************************
-pub fn generate_playlist_file(io : std.Io, parameter_string : []const u8) !void {
-    //Get directory that is relevant to the request from the header target. 
-    const current_dir, _ = std.mem.cutLast(u8, parameter_string, "/") orelse return error.NoSlashPresent;
+pub fn generate_and_get_playlist_file(
+    io : std.Io, 
+    allocator : std.mem.Allocator,
+    parameter_string : []const u8
+) !std.Io.File {
 
-    //Open current dir and create array list of all files within the window
+    // Chunking out the relevant strings from the playlist request. 
+    const current_dir_padded, const playlist_intermediary = std.mem.cutLast(u8, parameter_string, "/") orelse return error.ParsingNoSlashPresent;
+    const current_dir = current_dir_padded[1..current_dir_padded.len];
+    const start_time_itermediary0, const playlist_end = std.mem.cutLast(u8, playlist_intermediary, "=") orelse return error.ParsingNoEqualPresent;
+    _, const start_time_itermediary1 = std.mem.cut(u8, start_time_itermediary0, "=") orelse return error.ParsingNoSecondEqualPresent;
+    const playlist_start, _ = std.mem.cut(u8, start_time_itermediary1, "&") orelse return error.ParsingNoAmpersandPresent;
 
-    //Sort the array list to populate playlist with file order that produces cohesive video. 
+    std.debug.print("Dir trying to get a playlist for: {s}\n", .{ current_dir });
+    std.debug.print("Start time for playlist: {s}\n", .{ playlist_start });
+    std.debug.print("End time for playlist: {s}\n", .{ playlist_end });
+
+    var file_list = try get_sorted_array_list_of_files(
+        io,
+        allocator,
+        current_dir,
+        playlist_start,
+        playlist_end
+    );
+    defer {
+        for (file_list.items) |item| {
+            allocator.free(item);
+        }
+        file_list.deinit(allocator);
+    }
+    std.log.debug("Debug point 0: De we get to the point of iterating over the list?\n", .{});
+    for (file_list.items) |item| {
+        std.debug.print("\t-- Item being added to playlist file: {s}\n", .{ item });
+    }
+    std.log.debug("Debug point 1: Do we iterate over the list?\n", .{});
 
     //Create and write playlist file
-    var backing_buffer_for_playlist_file_path : [512]u8 = undefined;
-    const playlist_file_path = std.fmt.bufPrint(&backing_buffer_for_playlist_file_path, "{s}/.playlist.m3p8", .{ current_dir });
-    var playlist_file = try std.Io.Dir.createFile(.cwd(), io, playlist_file_path, .{});
-    defer playlist_file.close(io);
+    var backing_buffer_for_playlist_file_path : [128]u8 = undefined;
+    const playlist_file_path = try std.fmt.bufPrint(&backing_buffer_for_playlist_file_path, "{s}/.playlist.m3p8", .{ current_dir });
+    std.log.debug("The path for the file that I'm trying to make (relevant to cwd) is: {s}\n", .{ current_dir });
+    var playlist_file = try std.Io.Dir.createFile(.cwd(), io, playlist_file_path, .{ .read = true });
+
+    var backing_buffer_for_playlist_writer : [256]u8 = undefined;
+    var playlist_file_writer_full = playlist_file.writer(io, &backing_buffer_for_playlist_writer);
+    var playlist_file_writer = &playlist_file_writer_full.interface;
+
+    //Here we are actually writing the playlist file - eveything before this
+    //was setup. 
+    try playlist_file_writer.print("#EXTM3U\n", .{});
+    try playlist_file_writer.print("#EXT-X-VERSION:3\n", .{});
+    try playlist_file_writer.print("#EXT-X-TARGETDURATION:10\n", .{});
+    try playlist_file_writer.print("#EXT-X-MEDIA-SEQUENCE:0\n", .{});
+    try playlist_file_writer.print("#EXT-X-PLAYLIST-TYPE:VOD\n\n", .{});
+    for (file_list.items) |item| {
+        std.log.debug("Working on adding item to playlist: {s}\n", .{ item });
+        //For precision - we're going to calculate the duration of the clip
+        //(generally unnecessary, but to hit clean bounds always within the
+        //same minute - the client may have shorter clips as it approaches the
+        //end of the starting minute.) It's unclear how necessary this is to be
+        //accurate... so we'll do the calculation and learn if we can optimize
+        //in the future. 
+        const base_name, _ = std.mem.cutLast(u8, item, ".") orelse return error.DurationCalc0;
+        const intermediary, const end_seconds_string = std.mem.cutLast(u8, base_name, "_") orelse return error.DurationCalc1;
+        _, const start_seconds_string = std.mem.cutLast(u8, intermediary, "_") orelse return error.DurationCalc2;
+
+        const start_seconds = try std.fmt.parseInt(u8, start_seconds_string, 10);
+        const end_seconds = try std.fmt.parseInt(u8, end_seconds_string, 10);
+
+        const duration = @max(start_seconds, end_seconds) - @min(start_seconds, end_seconds);
+
+        try playlist_file_writer.print("#EXTINF:{d}.0,\n", .{ duration });
+        try playlist_file_writer.print("{s}\n", .{ item });
+    }
+    try playlist_file_writer.print("#EXT-X-ENDLIST\n", .{});
+    try playlist_file_writer.flush();
+
+    std.log.debug("Done writing playlist file\n", .{});
+
+    //Returning the populated file so that it can be served to the client.
+    return playlist_file;
+}
+
+fn get_sorted_array_list_of_files(
+    io : std.Io,
+    allocator : std.mem.Allocator,
+    dir_path : []const u8,
+    playlist_start : []const u8,
+    playlist_end : []const u8,
+) !std.ArrayList([]const u8) {
+    var iterable_dir = try std.Io.Dir.openDir(
+        .cwd(), io,
+        dir_path,
+        .{
+            .access_sub_paths = false,
+            .iterate = true,
+            .follow_symlinks = false,
+        }
+    );
+    defer iterable_dir.close(io);
+    var dir_iterator = iterable_dir.iterate();
+
+    //Initialize ArrayList that we'll use to track the files. 
+    var file_list : std.ArrayList([]const u8) = .empty;
+    errdefer {
+        for (file_list.items) |item| {
+            allocator.free(item);
+        }
+        file_list.deinit(allocator);
+    }
+
+    //Iterate over dir and add all relevant files to the arraylist - we'll sort
+    //in the next step
+    while (dir_iterator.next(io)) |nullable_entry| {
+        const entry = nullable_entry orelse break;
+        if ('.' == entry.name[0]) continue;
+        std.log.debug("Evaluating file for playlist curation: {s}\n", .{ entry.name });
+        const intermediary_string, _ = std.mem.cutLast(u8, entry.name, "_") orelse return error.NoUnderscore;
+        const video_time_trunc_timestamp, _ = std.mem.cutLast(u8, intermediary_string, "_") orelse return error.NoSecondUnderscore;
+
+        const order_start = std.mem.order(u8, playlist_start, video_time_trunc_timestamp);
+        const order_end = std.mem.order(u8, video_time_trunc_timestamp, playlist_end);
+
+        if ((order_start != .gt) and (order_end != .gt)) {
+            //add to the array list - this is within the time frame. 
+            const allocated_slice = try allocator.dupe(u8, entry.name);
+            try file_list.append(allocator, allocated_slice);
+        }
+    }
+    else |err| {
+        std.log.err("Error iterating over camera directory to generate playlist: {any}\n", .{ err });
+        return err;
+    }
+
+    std.mem.sort([]const u8, file_list.items, {}, file_sorting_less_than);
+
+    return file_list;
+}
+
+
+//******************************************************************************
+//* Function:    
+//*
+//* Description: 
+//******************************************************************************
+fn file_sorting_less_than(_ : void,  a : []const u8, b: []const u8) bool {
+    return std.mem.lessThan(u8, a, b);
 }
