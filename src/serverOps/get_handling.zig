@@ -52,6 +52,12 @@ pub fn generic_getter(
                 //};
                 html.serve_file_2(io, stream, &file, "application/vnd.apple.mpegurl");
             }
+            else if (is_video_file_request(stream)) {
+                std.log.info("Got video request: {s}\n", .{ stream.header_target });
+            }
+            else {
+                std.log.err("Unexpected request type through target: {s}\n", .{ stream.header_target });
+            }
         }
     }
 }
@@ -81,4 +87,11 @@ fn is_playlist_request(stream : *ComplexStream) bool {
     if (1 > end_count) return false;
     std.log.debug("The request from target \"{s}\" IS a playlist request\n", .{ stream.header_target });
     return true;
+}
+
+
+//*
+fn is_video_file_request(stream : *ComplexStream) bool {
+    std.log.info("Isolated string portion is: {s}\n", .{stream.header_target[(stream.header_target.len - 3)..stream.header_target.len]});
+    return std.mem.eql(u8, stream.header_target[(stream.header_target.len - 3)..stream.header_target.len], ".ts");
 }

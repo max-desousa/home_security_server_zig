@@ -102,6 +102,7 @@ pub fn serve_file_2(
             std.log.err("Error reading from file: {any}\n", .{ err });
             break;
         };
+        defer file_reader.interface.toss(file_reader.interface.bufferedLen());
         std.log.debug("We did read at least once successfully\n", .{});
 
         if (0 == file_reader.interface.buffer.len) break;
