@@ -54,6 +54,13 @@ pub fn generic_getter(
             }
             else if (is_video_file_request(stream)) {
                 std.log.info("Got video request: {s}\n", .{ stream.header_target });
+                html.serve_file_from_path(
+                    io,
+                    stream,
+                    stream.header_target,
+                     //"application/vnd.apple.mpegurl",
+                     "video/mp2t",
+                );
             }
             else {
                 std.log.err("Unexpected request type through target: {s}\n", .{ stream.header_target });
@@ -90,8 +97,28 @@ fn is_playlist_request(stream : *ComplexStream) bool {
 }
 
 
-//*
+//******************************************************************************
+//* Function: 
+//* 
+//* Description: 
+//******************************************************************************
 fn is_video_file_request(stream : *ComplexStream) bool {
-    std.log.info("Isolated string portion is: {s}\n", .{stream.header_target[(stream.header_target.len - 3)..stream.header_target.len]});
-    return std.mem.eql(u8, stream.header_target[(stream.header_target.len - 3)..stream.header_target.len], ".ts");
+    const video_file_extensions = [_][]const u8{
+        ".ts",
+        ".mov",
+        ".mp4",
+        ".avi",
+        ".mpeg",
+    };
+    for (video_file_extensions) |extension| {
+        const ext_len = extension.len;
+        if(std.mem.eql(
+            u8,
+            stream.header_target[(stream.header_target.len - ext_len)..stream.header_target.len],
+            extension)
+        ) {
+            return true;
+        }
+    }
+    return false;
 }

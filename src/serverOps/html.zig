@@ -52,6 +52,25 @@ pub fn generate_and_serve_directory_html(io : std.Io, stream : *ComplexStream) v
 
 
 //******************************************************************************
+//* Function: 
+//* 
+//* Description: 
+//******************************************************************************
+pub fn serve_file_from_path(
+    io : std.Io,
+    stream : *ComplexStream,
+    file_path : []const u8,
+    content_type : []const u8,
+) void {
+    var file = std.Io.Dir.openFile(.cwd(), io, file_path[1..], .{}) catch {
+        send_error_state(stream, "Server could not open requested file.");
+        return;
+    };
+    defer file.close(io);
+    serve_file_2(io, stream, &file, content_type);
+}
+
+//******************************************************************************
 //* Function:    
 //*
 //* Description: 
