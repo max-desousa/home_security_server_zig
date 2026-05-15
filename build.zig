@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     const calculated_cpu_count = std.Thread.getCpuCount() catch 3;
-    const option_max_threads = b.option(usize, "max_threads", "Set the maximum number of threads for concurrency (min = 3)") orelse calculated_cpu_count;
+    const option_max_threads = b.option(usize, "max_threads", "Set the maximum number of threads for concurrency (min = 3)") orelse @max(calculated_cpu_count, 3);
 
     if (3 > option_max_threads) {
         return error.ThreadCountTooLow;

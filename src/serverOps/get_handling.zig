@@ -17,7 +17,26 @@ pub fn generic_getter(
     std.log.debug("I'm in a getter right now...\n", .{});
 
     if (sysOps.request_is_directory(io, stream)) {
-        html.generate_and_serve_directory_html(io, stream);
+        const restricted_dir : []const u8 = "/Archives";
+        std.log.debug("stream.header_target: {s}", .{stream.header_target});
+        std.log.debug("raw stream.header_target: {any}", .{stream.header_target});
+        std.log.debug("stream.header_target[0..restricted_dir.len]: {s}", .{stream.header_target[0..restricted_dir.len]});
+        std.log.debug("restricted_dir: {s}", .{ restricted_dir });
+        std.log.debug("raw restricted_dir: {any}", .{ restricted_dir });
+        //const abbreviated_target : []const u8 = stream.header_target[0..restricted_dir.len];
+        if (std.mem.eql(u8, stream.header_target[0..restricted_dir.len], restricted_dir)) {
+            std.log.debug("We're trying to serve the static home file due to bad path\n", .{});
+            html.serve_file_from_path(
+                io,
+                stream,
+                "static/HelloWorld.html",
+                "text/html; charset=utf-8",
+            );
+        }
+        else {
+            std.log.debug("Generic folder serving\n", .{});
+            html.generate_and_serve_directory_html(io, stream);
+        }
     }
     else {
         if (request_is_for_favicon(stream)) {
