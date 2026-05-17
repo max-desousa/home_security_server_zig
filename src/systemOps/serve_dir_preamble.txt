@@ -127,9 +127,10 @@ function generateM3U8Playlist() {
   let url = currentPath;
   if (!url.endsWith("/")) url += "/";
 
-  url += "?m3u8&start=" + cleanStart + "&end=" + cleanEnd;
+  // This is the important change:
+  url += "?m3u8&start=" + cleanStart + "&end=" + cleanEnd + "&player=true";
 
-  console.log("📡 Playlist URL:", url);
+  console.log("📡 Opening Player with playlist:", url);
   window.open(url, "_blank");
 }
 

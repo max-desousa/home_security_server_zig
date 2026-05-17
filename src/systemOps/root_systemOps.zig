@@ -243,7 +243,8 @@ pub fn generate_and_get_playlist_file(
         const duration = @max(start_seconds, end_seconds) - @min(start_seconds, end_seconds);
 
         try playlist_file_writer.print("#EXTINF:{d}.0,\n", .{ duration });
-        try playlist_file_writer.print("{s}\n", .{ item });
+        //try playlist_file_writer.print("{s}\n", .{ item });
+        try playlist_file_writer.print("/{s}/{s}\n", .{ current_dir, item });
     }
     try playlist_file_writer.print("#EXT-X-ENDLIST\n", .{});
     try playlist_file_writer.flush();

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VOIDWATCH • Playback</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+    <style>
+        body { 
+            margin:0; 
+            background:#000; 
+            font-family: 'VT323', monospace; 
+            color:#0f0; 
+            overflow:hidden; 
+            height: 100vh;
+        }
+        .header { 
+            padding: 12px; 
+            background: #111; 
+            text-align: center; 
+            border-bottom: 2px solid #0f0; 
+            font-size: 18px;
+        }
+        .video-container {
+            height: calc(100vh - 60px);
+            background: #111;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        video { 
+            max-width: 100%; 
+            max-height: 100%; 
+            object-fit: contain;
+        }
+        .back { 
+            position:absolute; 
+            top:12px; 
+            left:12px; 
+            padding:6px 14px; 
+            background:#222; 
+            color:#0f0; 
+            text-decoration:none; 
+            border:1px solid #0f0; 
+            z-index: 30;
+        }
+    </style>
+</head>
+<body>
+    <a href="javascript:history.back()" class="back">← Back to Archives</a>
+
+    <div class="header">
+        <span id="title">Loading camera feed...</span>
+    </div>
+
+    <div class="video-container">
+        <video id="video" controls autoplay playsinline></video>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const titleEl = document.getElementById('title');
+
+        let playlistUrl = window.location.href
+            .replace('&player=true', '')
+            .replace('?player=true', '?');
+
+        console.log("✅ Loading playlist:", playlistUrl);
+
+        if (Hls.isSupported()) {
+            const hls = new Hls({
+                debug: false,
+                enableWorker: true,
+                lowLatencyMode: false,
+                backBufferLength: 120,
+                maxBufferLength: 240,
+                maxMaxBufferLength: 300,
+            });
+
+            hls.loadSource(playlistUrl);
+            hls.attachMedia(video);
+
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                console.log("✅ HLS Manifest loaded - seeking should work");
+                titleEl.textContent = "Now Playing";
+                video.controls = true;           // Force native controls
+            });
+
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = playlistUrl;
+        }
+
+        // Ensure controls stay visible and responsive
+        video.addEventListener('loadedmetadata', () => {
+            console.log("Video duration loaded:", video.duration);
+        });
+    </script>
+</body>
+</html>

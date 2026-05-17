@@ -45,24 +45,27 @@ pub fn generic_getter(
         }
         else {
             if (is_playlist_request(stream)) {
-                var file = sysOps.generate_and_get_playlist_file(
-                    io, 
-                    allocator, 
-                    stream.header_target
-                ) catch |err| {
-                    std.log.err("Encountered error creating playlist file: {any}\n", .{ err });
-                    return;
-                };
-                defer file.close(io);
-                //stream.request.respond(
-                //    "",
-                //    .{
-                //        .status = .no_content,
-                //    }
-                //) catch {
-                //    @panic("TODO: What do I do when server fails to reject favicon");
-                //};
-                html.serve_file_2(io, stream, &file, "application/vnd.apple.mpegurl");
+                if (null != std.mem.indexOf(u8, stream.header_target, "&player=true")) {
+                    html.serve_file_from_path(
+                        io,
+                        stream,
+                        "/static/player.html",
+                        "text/html; charset=utf-8",
+                    );
+                }
+                else {
+                    var file = sysOps.generate_and_get_playlist_file(
+                        io, 
+                        allocator, 
+                        stream.header_target
+                    ) catch |err| {
+                        std.log.err("Encountered error creating playlist file: {any}\n", .{ err });
+                        return;
+                    };
+                    defer file.close(io);
+
+                    html.serve_file_2(io, stream, &file, "application/vnd.apple.mpegurl");
+                }
             }
             else if (is_video_file_request(stream)) {
                 std.log.info("Got video request: {s}\n", .{ stream.header_target });
