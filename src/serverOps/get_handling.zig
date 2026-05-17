@@ -4,6 +4,42 @@ const home_page = @import("home_page.zig");
 const sysOps = @import("sysOps");
 const html = @import("html.zig");
 
+
+//Enum for routing table
+const RequestType = enum {
+    Directory,
+    File_NotVideo,
+    File_Video_Streaming,
+    File_Video_Downloading,
+    Home,
+    Ignore,
+    Playlist,
+};
+
+
+//******************************************************************************
+//* Function:    
+//*
+//* Description: 
+//******************************************************************************
+fn classify_request_type(
+    io : std.Io,
+    stream : *ComplexStream,
+) ?RequestType {
+    //Is the request a home page?
+    if (std.mem.eql(u8, stream.header_target, "/")) return .Home;
+
+    // Checking if the request is a directory
+    if (sysOps.request_is_directory(io, stream)) return .Directory;
+
+    //Checking if the request is a file... if it is... what type of file
+    //request is it?
+    if (std.Io.Dir.statFile(.cwd(), io, stream.fs_adjusted_target, .{})) |stat| {
+
+    }
+}
+
+
 //******************************************************************************
 //* Function:    
 //*
@@ -15,6 +51,54 @@ pub fn generic_getter(
     stream : *ComplexStream,
 ) void {
     std.log.debug("I'm in a getter right now...\n", .{});
+
+    //Simplify the request type for routing.
+    //On the event that the type is invalid... send "no content" response to
+    //the client
+    const request_type : RequestType = classify_request_type(io, stream) orelse {
+        stream.request.respond(
+            "",
+            .{
+                .status = .no_content,
+            }
+        ) catch {
+            @panic("TODO: What do I do when server fails to reject favicon");
+        };
+        return;
+    };
+
+    //This is the routing table. The rest of this function SHOULD be redirects
+    //to more appropriate fucntion calls. 
+    switch (request_type) {
+        .Home => {
+            html.serve_file_from_path(
+                io, 
+                stream, 
+                "/static/HelloWorld.html",
+                "text/html; charset=utf-8",
+            );
+        },
+        .Directory => html.serve_dir(io, stream),
+        .File_NotVideo => {
+            html.serve_file_from_path(
+                io, 
+                stream, 
+                stream.fs_adjusted_target,
+                "text/html; charset=utf-8",
+            );
+        },
+        .File_Video_Downloading => {
+            html.serve_file_from_path(
+                io, 
+                stream, 
+                stream.fs_adjusted_target,
+                "video/mp2t",
+            );
+        },
+        .File_Video_Streaming => html.send_video_streaming(io, stream),
+        .Playlist => html.send_playlist(io, stream),
+        else => unreachable,
+    }
 
     if (sysOps.request_is_directory(io, stream)) {
         if (!std.mem.startsWith(u8, stream.header_target, "/Archives")) {
@@ -83,6 +167,7 @@ pub fn generic_getter(
         }
     }
 }
+
 
 
 //******************************************************************************
