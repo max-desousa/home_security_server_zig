@@ -49,7 +49,13 @@ function addRow(name, url, isdir, size, size_string, date_modified, date_modifie
     var link = document.createElement("a");
     link.className = "icon file";
     link.innerText = name;
-    link.href = root + url;
+    
+    // Clicking filename → Single file m3u8 playlist
+    link.href = "#";
+    link.onclick = function(e) {
+      e.preventDefault();
+      generateSingleFilePlaylist(name);
+    };
 
     file_cell.dataset.value = name;
     file_cell.appendChild(link);
@@ -57,13 +63,19 @@ function addRow(name, url, isdir, size, size_string, date_modified, date_modifie
     var actions_cell = document.createElement("td");
     actions_cell.style.whiteSpace = "nowrap";
 
+    // View button → Single file m3u8 playlist
     var viewBtn = document.createElement("a");
-    viewBtn.href = root + url;
+    viewBtn.href = "#";
     viewBtn.className = "button";
     viewBtn.innerText = "▶ View";
     viewBtn.style.marginRight = "8px";
+    viewBtn.onclick = function(e) {
+      e.preventDefault();
+      generateSingleFilePlaylist(name);
+    };
     actions_cell.appendChild(viewBtn);
 
+    // Download button → Raw file (unchanged)
     var dlBtn = document.createElement("a");
     dlBtn.href = root + url;
     dlBtn.className = "button danger";
@@ -103,13 +115,13 @@ function onHasParentDirectory() {
   document.getElementById("parentDirLink").href = root + "..";
 }
 
-// ====================== NEW: CLEAN YYYYMMDD_HHMM ======================
+// ====================== ORIGINAL PLAYLIST WIDGET ======================
 function formatToFilePrefix(datetimeLocal) {
-  // datetimeLocal = "2026-04-18T10:02"
+  // Original behavior - no seconds
   return datetimeLocal
-    .replace(/-/g, '')      // remove all dashes → 20260418T1002
-    .replace('T', '_')      // → 20260418_1002
-    .replace(':', '');      // → 20260418_1002
+    .replace(/-/g, '')      
+    .replace('T', '_')      
+    .replace(':', '');      
 }
 
 function generateM3U8Playlist() {
@@ -127,10 +139,21 @@ function generateM3U8Playlist() {
   let url = currentPath;
   if (!url.endsWith("/")) url += "/";
 
-  // This is the important change:
   url += "?m3u8&start=" + cleanStart + "&end=" + cleanEnd + "&player=true";
 
-  console.log("📡 Opening Player with playlist:", url);
+  console.log("📡 Opening Playlist:", url);
+  window.open(url, "_blank");
+}
+
+// ====================== NEW: SINGLE FILE PLAYLIST ======================
+function generateSingleFilePlaylist(filename) {
+  let url = currentPath;
+  if (!url.endsWith("/")) url += "/";
+
+  // Clean format you requested:
+  url += filename + "?m3u8&player=true";
+
+  console.log("🎥 Opening single file:", url);
   window.open(url, "_blank");
 }
 
@@ -144,10 +167,8 @@ function finalizeDirectory() {
   initializeVideoPlaylistUI();
 }
 
-// Table sorting (unchanged)
-function sortTable(column) { /* ... your existing sortTable function ... */ 
-  // (Keep the one you already have from previous version)
-}
+// Table sorting
+function sortTable(column) { /* ... your existing sortTable function ... */ }
 function addHandlers(element, column) {
   element.onclick = (e) => sortTable(column);
   element.onkeydown = (e) => {
@@ -165,7 +186,6 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <style>
-  /* Your existing styles + panel */
   h1 { border-bottom: 1px solid #c0c0c0; margin-bottom: 10px; padding-bottom: 10px; }
   table { border-collapse: collapse; }
   th { cursor: pointer; }

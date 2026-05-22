@@ -8,12 +8,13 @@ const html = @import("html.zig");
 //Enum for routing table
 const RequestType = enum {
     Directory,
-    File_NotVideo,
-    File_Video_Streaming,
-    File_Video_Downloading,
+    File_RawSend,
+    File_SendAsVideo,
     Home,
     Ignore,
-    Playlist,
+    Playlist_PlayerSetup,
+    Playlist_StreamCalculated,
+    Playlist_StreamSingleFile,
 };
 
 
@@ -32,11 +33,22 @@ fn classify_request_type(
     // Checking if the request is a directory
     if (sysOps.request_is_directory(io, stream)) return .Directory;
 
-    //Checking if the request is a file... if it is... what type of file
-    //request is it?
-    if (std.Io.Dir.statFile(.cwd(), io, stream.fs_adjusted_target, .{})) |stat| {
+    if (std.mem.endsWith(u8, stream.header_target, "&player=true")) return .Playlist_PlayerSetup;
 
+    if (is_playlist_request(stream)) return .Playlist_StreamCalculated;
+
+    if (std.mem.endsWith(u8, stream.header_target, "?m3u8")) return .Playlist_StreamSingleFile;
+
+    if (is_video_file_request(stream)) return .File_SendAsVideo; {
+        std.log.info("Got video request: {s}\n", .{ stream.header_target });
     }
+
+    ////Checking if the request is a file... if it is... what type of file
+    ////request is it?
+    //if (std.Io.Dir.statFile(.cwd(), io, stream.fs_adjusted_target, .{})) |stat| {
+    //}
+
+    return null;
 }
 
 
@@ -78,94 +90,115 @@ pub fn generic_getter(
                 "text/html; charset=utf-8",
             );
         },
-        .Directory => html.serve_dir(io, stream),
-        .File_NotVideo => {
-            html.serve_file_from_path(
-                io, 
-                stream, 
-                stream.fs_adjusted_target,
-                "text/html; charset=utf-8",
-            );
-        },
-        .File_Video_Downloading => {
-            html.serve_file_from_path(
-                io, 
-                stream, 
-                stream.fs_adjusted_target,
-                "video/mp2t",
-            );
-        },
-        .File_Video_Streaming => html.send_video_streaming(io, stream),
-        .Playlist => html.send_playlist(io, stream),
-        else => unreachable,
-    }
-
-    if (sysOps.request_is_directory(io, stream)) {
-        if (!std.mem.startsWith(u8, stream.header_target, "/Archives")) {
-            std.log.debug("We're trying to serve the static home file due to bad path\n", .{});
+        .Directory => html.generate_and_serve_directory_html(io, stream),
+        .Playlist_PlayerSetup => {
             html.serve_file_from_path(
                 io,
                 stream,
-                "/static/HelloWorld.html",
+                "/static/player.html",
                 "text/html; charset=utf-8",
             );
-        }
-        else {
-            std.log.debug("Generic folder serving\n", .{});
-            html.generate_and_serve_directory_html(io, stream);
-        }
+        },
+        .Playlist_StreamCalculated => generate_and_serve_playlist(io, allocator, stream),
+        .File_SendAsVideo => {
+            html.serve_file_from_path(
+                io,
+                stream,
+                stream.header_target,
+                 //"application/vnd.apple.mpegurl",
+                 "video/mp2t",
+            );
+        },
+        .Playlist_StreamSingleFile => {
+            generate_and_serve_single_file_playlist(io, stream);
+        },
+        //.File_NotVideo => {
+        //    html.serve_file_from_path(
+        //        io, 
+        //        stream, 
+        //        stream.fs_adjusted_target,
+        //        "text/html; charset=utf-8",
+        //    );
+        //},
+        //.File_Video_Downloading => {
+        //    html.serve_file_from_path(
+        //        io, 
+        //        stream, 
+        //        stream.fs_adjusted_target,
+        //        "video/mp2t",
+        //    );
+        //},
+        //.File_Video_Streaming => html.send_video_streaming(io, stream),
+        //.Playlist => html.send_playlist(io, stream),
+        else => unreachable,
     }
-    else {
-        if (request_is_for_favicon(stream)) {
-            std.log.debug("Handling a favicon request\n", .{});
-            stream.request.respond(
-                "",
-                .{
-                    .status = .no_content,
-                }
-            ) catch {
-                @panic("TODO: What do I do when server fails to reject favicon");
-            };
-        }
-        else {
-            if (is_playlist_request(stream)) {
-                if (null != std.mem.indexOf(u8, stream.header_target, "&player=true")) {
-                    html.serve_file_from_path(
-                        io,
-                        stream,
-                        "/static/player.html",
-                        "text/html; charset=utf-8",
-                    );
-                }
-                else {
-                    var file = sysOps.generate_and_get_playlist_file(
-                        io, 
-                        allocator, 
-                        stream.header_target
-                    ) catch |err| {
-                        std.log.err("Encountered error creating playlist file: {any}\n", .{ err });
-                        return;
-                    };
-                    defer file.close(io);
 
-                    html.serve_file_2(io, stream, &file, "application/vnd.apple.mpegurl");
-                }
-            }
-            else if (is_video_file_request(stream)) {
-                std.log.info("Got video request: {s}\n", .{ stream.header_target });
-                html.serve_file_from_path(
-                    io,
-                    stream,
-                    stream.header_target,
-                     //"application/vnd.apple.mpegurl",
-                     "video/mp2t",
-                );
-            }
-            else {
-                std.log.err("Unexpected request type through target: {s}\n", .{ stream.header_target });
-            }
-        }
-    }
+//    if (sysOps.request_is_directory(io, stream)) {
+//        if (!std.mem.startsWith(u8, stream.header_target, "/Archives")) {
+//            std.log.debug("We're trying to serve the static home file due to bad path\n", .{});
+//            html.serve_file_from_path(
+//                io,
+//                stream,
+//                "/static/HelloWorld.html",
+//                "text/html; charset=utf-8",
+//            );
+//        }
+//        else {
+//            std.log.debug("Generic folder serving\n", .{});
+//            html.generate_and_serve_directory_html(io, stream);
+//        }
+//    }
+//    else {
+//        if (request_is_for_favicon(stream)) {
+//            std.log.debug("Handling a favicon request\n", .{});
+//            stream.request.respond(
+//                "",
+//                .{
+//                    .status = .no_content,
+//                }
+//            ) catch {
+//                @panic("TODO: What do I do when server fails to reject favicon");
+//            };
+//        }
+//        else {
+//            if (is_playlist_request(stream)) {
+//                if (null != std.mem.indexOf(u8, stream.header_target, "&player=true")) {
+//                    html.serve_file_from_path(
+//                        io,
+//                        stream,
+//                        "/static/player.html",
+//                        "text/html; charset=utf-8",
+//                    );
+//                }
+//                else {
+//                    var file = sysOps.generate_and_get_playlist_file(
+//                        io, 
+//                        allocator, 
+//                        stream.header_target
+//                    ) catch |err| {
+//                        std.log.err("Encountered error creating playlist file: {any}\n", .{ err });
+//                        return;
+//                    };
+//                    defer file.close(io);
+//
+//                    html.serve_file_2(io, stream, &file, "application/vnd.apple.mpegurl");
+//                }
+//            }
+//            else if (is_video_file_request(stream)) {
+//                std.log.info("Got video request: {s}\n", .{ stream.header_target });
+//                html.serve_file_from_path(
+//                    io,
+//                    stream,
+//                    stream.header_target,
+//                     //"application/vnd.apple.mpegurl",
+//                     "video/mp2t",
+//                );
+//            }
+//            else {
+//                std.log.err("Unexpected request type through target: {s}\n", .{ stream.header_target });
+//            }
+//        }
+//    }
 }
 
 
@@ -221,4 +254,42 @@ fn is_video_file_request(stream : *ComplexStream) bool {
         }
     }
     return false;
+}
+
+
+//******************************************************************************
+//* Function: 
+//* 
+//* Description: 
+//******************************************************************************
+fn generate_and_serve_playlist(
+    io : std.Io,
+    allocator : std.mem.Allocator,
+    stream : *ComplexStream,
+) void {
+    var file = sysOps.generate_and_get_playlist_file(
+        io,
+        allocator,
+        stream.header_target,
+    ) catch |err| {
+        std.log.err("Encountered error creating playlist file: {any}\n", .{ err });
+        return;
+    };
+    defer file.close(io);
+    html.serve_file_2(io, stream, &file, "application/vnd.apple.mpegurl");
+}
+
+
+//******************************************************************************
+//* Function: 
+//* 
+//* Description: 
+//******************************************************************************
+fn generate_and_serve_single_file_playlist(
+    io : std.Io,
+    stream : *ComplexStream,
+) void {
+    var file = std.Io.Dir.createFile(.cwd(), io, ".single_file_playlist", .{ .read = true }) catch unreachable;
+    var backing_buffer_for_writer : [256]u8 = undefined;
+    var playlist_file_writer = file.writer(io, &backing_buffer_for_writer);
 }
