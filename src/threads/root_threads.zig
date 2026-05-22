@@ -1,7 +1,6 @@
 const std = @import("std");
 const config = @import("config");
-const debug = @import("debug");
-const parser = @import("parser");
+const serverOps = @import("serverOps");
 const ComplexStream = @import("complexStream");
 
 
@@ -103,7 +102,7 @@ pub fn accept(
     while (true) {
         io.checkCancel() catch {
             std.debug.print("Cancelling accept thread due to top level cancellation\n", .{});
-            return;
+           return;
         };
 
         //Handle acceptance of a stream.
@@ -146,6 +145,7 @@ pub fn connection_router(
         };
         //Handle acceptance of a stream.
         if (queue.getOne(io)) |stream| {
+            defer stream.close(io);
             std.debug.print("Processing new stream on thread {d}\n", .{ thread_num });
 
             var buffer_for_reading : [STREAM_BUFF_SIZE]u8 = undefined;
@@ -171,8 +171,8 @@ pub fn connection_router(
             };
 
             switch(method) {
-                .GET => parser.get.generic_getter(),
-                .POST => parser.post.generic_poster(allocator, io, &complex_stream), 
+                .GET => serverOps.get.generic_getter(io, allocator, &complex_stream),
+                .POST => serverOps.post.generic_poster(allocator, io, &complex_stream), 
                 else => {
                     std.log.info("Received an unsupported http request (method: {s}) on thread {d}\n", .{ @tagName(method), thread_num });
                 },

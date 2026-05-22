@@ -1,5 +1,6 @@
 const std = @import("std");
 const ComplexStream = @import("complexStream");
+const sysOps = @import("sysOps");
 
 const SIZE_FOR_BUFFERS = 4096;
 
@@ -73,9 +74,9 @@ fn archive_payload(
         return;
     }
 
-    ensure_directory_exists(io, archive_path) catch {
-        @panic("TODO: handle inability to create folder to house archive files\n");
-    };
+    //const folder_status = ensure_directory_exists(io, archive_path) catch {
+    //    @panic("TODO: handle inability to create folder to house archive files\n");
+    //};
 
     // Trying to create the file descriptor that we'll write/archive to
     const new_file = std.Io.Dir.createFile(.cwd(), io, archive_path, .{}) catch |err| {
@@ -156,7 +157,7 @@ fn check_if_file_already_exists(io : std.Io, path : []const u8) bool {
 //
 // Description: 
 //##############################################################################
-fn ensure_directory_exists(io : std.Io, archive_path : []const u8) !void {
+fn ensure_directory_exists(io : std.Io, archive_path : []const u8) !std.Io.Dir.CreatePathStatus {
     const nullable_cut = std.mem.cutLast(u8, archive_path, "/");
 
     const directory = if (nullable_cut) |cut| blk: {
@@ -166,5 +167,5 @@ fn ensure_directory_exists(io : std.Io, archive_path : []const u8) !void {
         return error.NoDirRequested;
     };
 
-    _ = try std.Io.Dir.createDirPathStatus(.cwd(), io, directory, .default_dir);
+    return try std.Io.Dir.createDirPathStatus(.cwd(), io, directory, .default_dir);
 }

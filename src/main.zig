@@ -1,7 +1,6 @@
 const std = @import("std");
 const config = @import("config");
 const options = @import("options");
-const debug = @import("debug");
 const threads = @import("threads");
 
 
@@ -53,7 +52,7 @@ pub fn main() !void {
 
     // Reading/establishing config file
     try config.establish_config(io);
-    debug.print("Desired Host from config: {s}\n", .{ config.get_desired_host() });
+    std.log.debug("Desired Host from config: {s}\n", .{ config.get_desired_host() });
 
     //Create a server object - done here to simplify error union
 
@@ -80,10 +79,10 @@ pub fn main() !void {
     //Clean up all threads when program closes
     defer {
         for (threads_to_close.items, 0..) |*future, i| {
-            debug.print("Cancelling thread: {d}\n", .{i});
+            std.log.debug("Cancelling thread: {d}\n", .{i});
             _ = future.cancel(io);
         }
-        debug.print("Deiniting arraylist...\n", .{});
+        std.log.debug("Deiniting arraylist...\n", .{});
         threads_to_close.deinit(allocator);
     }
 

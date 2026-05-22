@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="google" value="notranslate">
+
+<script>
+// Global state
+let currentPath = "";
+let hasVideos = false;
+
+function isVideoFile(name) {
+  const lower = name.toLowerCase();
+  return lower.endsWith(".ts") || lower.endsWith(".mp4");
+}
+
+function addRow(name, url, isdir, size, size_string, date_modified, date_modified_string) {
+  if (name === "." || name === "..") return;
+
+  var root = document.location.pathname;
+  if (root.substr(-1) !== "/") root += "/";
+
+  var tbody = document.getElementById("tbody");
+  var row = document.createElement("tr");
+
+  if (isdir) {
+    name += "/";
+    url += "/";
+    size = 0;
+    size_string = "";
+
+    var file_cell = document.createElement("td");
+    var link = document.createElement("a");
+    link.className = "icon dir";
+    link.innerText = name;
+    link.href = root + url;
+
+    file_cell.dataset.value = name;
+    file_cell.appendChild(link);
+
+    row.appendChild(file_cell);
+    row.appendChild(createCell(size, size_string));
+    row.appendChild(createCell(date_modified, date_modified_string));
+  } else {
+    if (isVideoFile(name)) hasVideos = true;
+
+    var file_cell = document.createElement("td");
+    var link = document.createElement("a");
+    link.className = "icon file";
+    link.innerText = name;
+    
+    // Clicking filename → Single file m3u8 playlist
+    link.href = "#";
+    link.onclick = function(e) {
+      e.preventDefault();
+      generateSingleFilePlaylist(name);
+    };
+
+    file_cell.dataset.value = name;
+    file_cell.appendChild(link);
+
+    var actions_cell = document.createElement("td");
+    actions_cell.style.whiteSpace = "nowrap";
+
+    // View button → Single file m3u8 playlist
+    var viewBtn = document.createElement("a");
+    viewBtn.href = "#";
+    viewBtn.className = "button";
+    viewBtn.innerText = "▶ View";
+    viewBtn.style.marginRight = "8px";
+    viewBtn.onclick = function(e) {
+      e.preventDefault();
+      generateSingleFilePlaylist(name);
+    };
+    actions_cell.appendChild(viewBtn);
+
+    // Download button → Raw file (unchanged)
+    var dlBtn = document.createElement("a");
+    dlBtn.href = root + url;
+    dlBtn.className = "button danger";
+    dlBtn.innerText = "↓ Download";
+    dlBtn.download = name;
+    actions_cell.appendChild(dlBtn);
+
+    row.appendChild(file_cell);
+    row.appendChild(actions_cell);
+    row.appendChild(createCell(size, size_string));
+    row.appendChild(createCell(date_modified, date_modified_string));
+  }
+
+  tbody.appendChild(row);
+}
+
+function createCell(value, text) {
+  var cell = document.createElement("td");
+  cell.className = "detailsColumn";
+  cell.dataset.value = value;
+  cell.innerText = text;
+  return cell;
+}
+
+function start(location) {
+  currentPath = location;
+  document.getElementById("header").innerText = 
+    document.getElementById("header").innerText.replace("LOCATION", location);
+  document.getElementById("title").innerText = document.getElementById("header").innerText;
+}
+
+function onHasParentDirectory() {
+  const box = document.getElementById("parentDirLinkBox");
+  box.style.display = "block";
+  const root = document.location.pathname.endsWith("/") ? 
+               document.location.pathname : document.location.pathname + "/";
+  document.getElementById("parentDirLink").href = root + "..";
+}
+
+// ====================== ORIGINAL PLAYLIST WIDGET ======================
+function formatToFilePrefix(datetimeLocal) {
+  // Original behavior - no seconds
+  return datetimeLocal
+    .replace(/-/g, '')      
+    .replace('T', '_')      
+    .replace(':', '');      
+}
+
+function generateM3U8Playlist() {
+  const startInput = document.getElementById("startTime").value;
+  const endInput   = document.getElementById("endTime").value;
+
+  if (!startInput || !endInput) {
+    alert("Please select both Start and End time.");
+    return;
+  }
+
+  const cleanStart = formatToFilePrefix(startInput);
+  const cleanEnd   = formatToFilePrefix(endInput);
+
+  let url = currentPath;
+  if (!url.endsWith("/")) url += "/";
+
+  url += "?m3u8&start=" + cleanStart + "&end=" + cleanEnd + "&player=true";
+
+  console.log("📡 Opening Playlist:", url);
+  window.open(url, "_blank");
+}
+
+// ====================== NEW: SINGLE FILE PLAYLIST ======================
+function generateSingleFilePlaylist(filename) {
+  let url = currentPath;
+  if (!url.endsWith("/")) url += "/";
+
+  // Clean format you requested:
+  url += filename + "?m3u8&player=true";
+
+  console.log("🎥 Opening single file:", url);
+  window.open(url, "_blank");
+}
+
+function initializeVideoPlaylistUI() {
+  if (hasVideos) {
+    document.getElementById("videoPlaylistPanel").style.display = "block";
+  }
+}
+
+function finalizeDirectory() {
+  initializeVideoPlaylistUI();
+}
+
+// Table sorting
+function sortTable(column) { /* ... your existing sortTable function ... */ }
+function addHandlers(element, column) {
+  element.onclick = (e) => sortTable(column);
+  element.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      sortTable(column);
+      e.preventDefault();
+    }
+  };
+}
+window.addEventListener('DOMContentLoaded', () => {
+  addHandlers(document.getElementById('nameColumnHeader'), 0);
+  addHandlers(document.getElementById('sizeColumnHeader'), 1);
+  addHandlers(document.getElementById('dateColumnHeader'), 2);
+});
+</script>
+
+<style>
+  h1 { border-bottom: 1px solid #c0c0c0; margin-bottom: 10px; padding-bottom: 10px; }
+  table { border-collapse: collapse; }
+  th { cursor: pointer; }
+  td.detailsColumn { padding-inline-start: 2em; text-align: end; white-space: nowrap; }
+  a.icon { padding-inline-start: 1.5em; text-decoration: none; }
+  a.icon:hover { text-decoration: underline; }
+  .button { padding: 4px 10px; margin: 2px; background: #0066cc; color: white; text-decoration: none; border-radius: 4px; font-size: 13px; }
+  .button:hover { background: #0052a3; }
+  .danger { background: #c0392b; }
+  .danger:hover { background: #a93226; }
+
+  #videoPlaylistPanel {
+    margin: 20px 0; padding: 20px; background: #f0f8ff; border: 2px solid #0066cc; 
+    border-radius: 8px;
+  }
+  .time-picker { display: flex; gap: 20px; flex-wrap: wrap; align-items: end; margin: 15px 0; }
+  .generate-btn { background: #28a745; color: white; padding: 10px 20px; font-size: 15px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; }
+  .generate-btn:hover { background: #218838; }
+
+  a.file, a.dir, a.up { /* your existing background icons */ }
+</style>
+
+<title id="title"></title>
+</head>
+
+<body>
+
+<h1 id="header">Index of LOCATION</h1>
+
+<div id="parentDirLinkBox" style="display:none">
+  <a id="parentDirLink" class="icon up"><span id="parentDirText">[parent directory]</span></a>
+</div>
+
+<!-- Video Playlist Panel -->
+<div id="videoPlaylistPanel" style="display: none;">
+  <h2>🎥 Generate HLS Playlist (m3u8)</h2>
+  <p><strong>Video files detected.</strong> Select time range (matches filename format <code>YYYYMMDD_HHMM</code>)</p>
+  
+  <div class="time-picker">
+    <div>
+      <label for="startTime">Start Time</label><br>
+      <input type="datetime-local" id="startTime">
+    </div>
+    <div>
+      <label for="endTime">End Time</label><br>
+      <input type="datetime-local" id="endTime">
+    </div>
+    <div>
+      <button onclick="generateM3U8Playlist()" class="generate-btn">Generate m3u8 Playlist</button>
+    </div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr class="header" id="theader">
+      <th id="nameColumnHeader">Name</th>
+      <th>Actions</th>
+      <th id="sizeColumnHeader" class="detailsColumn">Size</th>
+      <th id="dateColumnHeader" class="detailsColumn">Date Modified</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+</body>
+</html>

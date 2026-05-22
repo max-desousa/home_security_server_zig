@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     const calculated_cpu_count = std.Thread.getCpuCount() catch 3;
-    const option_max_threads = b.option(usize, "max_threads", "Set the maximum number of threads for concurrency (min = 3)") orelse calculated_cpu_count;
+    const option_max_threads = b.option(usize, "max_threads", "Set the maximum number of threads for concurrency (min = 3)") orelse @max(calculated_cpu_count, 3);
 
     if (3 > option_max_threads) {
         return error.ThreadCountTooLow;
@@ -15,50 +15,28 @@ pub fn build(b: *std.Build) !void {
     options.addOption(usize, "max_threads", option_max_threads);
 
     const mod_complex_stream = b.createModule(.{
-        .root_source_file = b.path("src/net/complexStream/root_complex_stream.zig"),
+        .root_source_file = b.path("src/global/structs/complexStream/root_complex_stream.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    const mod_debug = b.createModule(.{
-        .root_source_file = b.path("src/debug/root_debug.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    const mod_parser = b.createModule(.{
-        .root_source_file = b.path("src/parser/root_parser.zig"),
+    const mod_system_ops = b.createModule(.{
+        .root_source_file = b.path("src/systemOps/root_systemOps.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{ .name = "debug", .module = mod_debug },
             .{ .name = "complexStream", .module = mod_complex_stream },
         },
     });
 
-    const mod_req = b.createModule(.{
-        .root_source_file = b.path("src/req/root_req.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    const mod_resources = b.createModule(.{
-        .root_source_file = b.path("src/resources/root_resources.zig"),
+    const mod_server_ops = b.createModule(.{
+        .root_source_file = b.path("src/serverOps/root_serverOps.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{ .name = "resources", .module = mod_req },
+            .{ .name = "complexStream", .module = mod_complex_stream },
+            .{ .name = "sysOps", .module = mod_system_ops },
         },
-    });
-
-    const mod_serve = b.createModule(.{
-        .root_source_file = b.path("src/serve/root_serve.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "request", .module = mod_req },
-            .{ .name = "resources" , .module = mod_resources },
-        }
     });
 
     const mod_config = b.createModule(.{
@@ -73,9 +51,8 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "config", .module = mod_config },
-            .{ .name = "debug", .module = mod_debug },
-            .{ .name = "parser", .module = mod_parser },
             .{ .name = "complexStream", .module = mod_complex_stream },
+            .{ .name = "serverOps", .module = mod_server_ops },
         },
     });
 
@@ -87,9 +64,7 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "config", .module = mod_config },
-                .{ .name = "requests", .module = mod_req },
-                .{ .name = "serve", .module = mod_serve },
-                .{ .name = "debug", .module = mod_debug },
+                .{ .name = "serverOps", .module = mod_server_ops },
                 .{ .name = "threads", .module = mod_threads },
             },
         }),

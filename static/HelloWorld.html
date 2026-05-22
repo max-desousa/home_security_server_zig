@@ -1,9 +1,145 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>The is the title of your demo html page!</title>
-  </head>
-  <body>
-    <p>This is the body of our simple HTML page to verify that our server is working</p>
-  </body>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VOIDWATCH • v0.8.4</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        
+        body {
+            font-family: 'VT323', monospace;
+            background: #000;
+            color: #00ff41;
+            overflow: hidden;
+        }
+
+        .scanline {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                to bottom,
+                transparent 50%,
+                rgba(0, 255, 65, 0.03) 50%
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            animation: scan 4s linear infinite;
+            z-index: 10;
+        }
+
+        @keyframes scan {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+
+        .glitch {
+            animation: glitch 1s linear infinite;
+        }
+
+        @keyframes glitch {
+            2%, 64% { transform: translate(2px,0) skew(0deg); }
+            4%, 60% { transform: translate(-2px,0) skew(0deg); }
+            62% { transform: translate(0,0) skew(5deg); }
+        }
+
+        .terminal {
+            border: 2px solid #00ff41;
+            box-shadow: 0 0 20px #00ff41,
+                        inset 0 0 20px rgba(0, 255, 65, 0.2);
+        }
+
+        .led {
+            animation: led-pulse 1.5s infinite;
+        }
+    </style>
+</head>
+<body class="h-screen flex items-center justify-center bg-black relative">
+    <!-- Background grid -->
+    <div class="absolute inset-0 bg-[linear-gradient(to_right,#00ff4122_1px,transparent_1px),linear-gradient(to_bottom,#00ff4122_1px,transparent_1px)] bg-[size:40px_40px] opacity-30"></div>
+    
+    <div class="scanline"></div>
+
+    <!-- Main Container -->
+    <div class="max-w-2xl w-full mx-auto p-8 terminal bg-black/90 rounded-xl z-20">
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b border-[#00ff41] pb-4 mb-8">
+            <div class="flex items-center gap-3">
+                <div class="w-5 h-5 bg-[#00ff41] rounded-full led"></div>
+                <div>
+                    <h1 class="text-5xl tracking-widest glitch">VOIDWATCH</h1>
+                    <p class="text-xs text-[#00ff4180] -mt-1">SECURE • SURVEILLANCE • SYSTEM</p>
+                </div>
+            </div>
+            <div class="text-right">
+                <div class="text-sm text-[#00ff4180]">NODE-47 • ONLINE</div>
+                <div class="text-xs text-[#00ff4180]">17.05.2026  14:01:37 UTC</div>
+            </div>
+        </div>
+
+        <!-- Status -->
+        <div class="grid grid-cols-3 gap-4 mb-10 text-center text-sm">
+            <div class="bg-black border border-[#00ff41]/50 p-3">
+                <div class="text-[#00ff4180]">CAMERAS</div>
+                <div class="text-4xl text-[#00ff41]">04<span class="text-xs align-super">/04</span></div>
+                <div class="text-[10px] text-emerald-400">ALL CONNECTED</div>
+            </div>
+            <div class="bg-black border border-[#00ff41]/50 p-3">
+                <div class="text-[#00ff4180]">STORAGE</div>
+                <div class="text-4xl text-[#00ff41]">87%</div>
+                <div class="text-[10px] text-emerald-400">2.4TB FREE</div>
+            </div>
+            <div class="bg-black border border-[#00ff41]/50 p-3">
+                <div class="text-[#00ff4180]">THREAT</div>
+                <div class="text-4xl text-[#00ff41]">LOW</div>
+                <div class="text-[10px] text-emerald-400">NO INTRUSIONS</div>
+            </div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="grid grid-cols-2 gap-6">
+            <!-- Archives Button -->
+            <a href="/Archives" 
+               class="group relative block bg-black border-2 border-[#00ff41] hover:border-white hover:bg-[#00ff41]/10 transition-all duration-200 overflow-hidden">
+                <div class="p-8 text-center">
+                    <div class="text-6xl mb-4 group-hover:scale-110 transition-transform">📼</div>
+                    <div class="text-3xl tracking-widest">ARCHIVES</div>
+                    <div class="text-xs text-[#00ff4180] mt-2">VIEW • PLAYBACK • EXPORT</div>
+                </div>
+                <div class="absolute bottom-0 left-0 h-1 w-full bg-[#00ff41] scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+            </a>
+
+            <!-- Settings Button -->
+            <a href="/Settings" 
+               class="group relative block bg-black border-2 border-[#00ff41] hover:border-white hover:bg-[#00ff41]/10 transition-all duration-200 overflow-hidden">
+                <div class="p-8 text-center">
+                    <div class="text-6xl mb-4 group-hover:scale-110 transition-transform">⚙️</div>
+                    <div class="text-3xl tracking-widest">SERVER SETTINGS</div>
+                    <div class="text-xs text-[#00ff4180] mt-2">CONFIG • NETWORK • SECURITY</div>
+                </div>
+                <div class="absolute bottom-0 left-0 h-1 w-full bg-[#00ff41] scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+            </a>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-12 text-center text-[10px] text-[#00ff4180] flex justify-between items-center">
+            <div>SECURE CONNECTION • TLS 1.3</div>
+            <div class="flex items-center gap-2">
+                <div class="w-2 h-2 bg-[#00ff41] rounded-full animate-pulse"></div>
+                SYSTEM ARMED
+            </div>
+            <div>© 2026 VOIDSEC INDUSTRIES</div>
+        </div>
+    </div>
+
+    <!-- Corner decorations -->
+    <div class="fixed top-4 left-4 text-[#00ff4180] text-xs border border-[#00ff41]/30 px-2 py-1">ROOT</div>
+    <div class="fixed top-4 right-4 text-[#00ff4180] text-xs border border-[#00ff41]/30 px-2 py-1">v0.8.4-BETA</div>
+    <div class="fixed bottom-4 left-4 text-[#00ff4180] text-xs border border-[#00ff41]/30 px-2 py-1">CAM-01 • LIVE</div>
+    <div class="fixed bottom-4 right-4 text-[#00ff4180] text-xs border border-[#00ff41]/30 px-2 py-1">LOGGED IN AS ADMIN</div>
+</body>
 </html>
