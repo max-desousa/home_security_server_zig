@@ -109,9 +109,8 @@ pub fn generic_getter(
                  "video/mp2t",
             );
         },
-        .Playlist_StreamSingleFile => {
-            generate_and_serve_single_file_playlist(io, stream);
-        },
+        .Playlist_StreamSingleFile => generate_and_serve_playlist(io, allocator, stream),
+
         //.File_NotVideo => {
         //    html.serve_file_from_path(
         //        io, 
@@ -277,19 +276,4 @@ fn generate_and_serve_playlist(
     };
     defer file.close(io);
     html.serve_file_2(io, stream, &file, "application/vnd.apple.mpegurl");
-}
-
-
-//******************************************************************************
-//* Function: 
-//* 
-//* Description: 
-//******************************************************************************
-fn generate_and_serve_single_file_playlist(
-    io : std.Io,
-    stream : *ComplexStream,
-) void {
-    var file = std.Io.Dir.createFile(.cwd(), io, ".single_file_playlist", .{ .read = true }) catch unreachable;
-    var backing_buffer_for_writer : [256]u8 = undefined;
-    var playlist_file_writer = file.writer(io, &backing_buffer_for_writer);
 }

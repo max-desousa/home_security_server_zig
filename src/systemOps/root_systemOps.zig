@@ -163,6 +163,77 @@ fn timestamp_to_string(timestamp : std.Io.Timestamp, buffer : []u8) ![]const u8 
 //* Function:    
 //*
 //* Description: 
+//******************************************************************************
+fn get_single_file_filelist_for_playlist(
+    allocator : std.mem.Allocator,
+    parameter_string : []const u8,
+) !std.ArrayList([]const u8) {
+    _, const file_name = std.mem.cutLast(u8, parameter_string, "/") orelse return error.BadString;
+    var file_list : std.ArrayList([]const u8) = .empty;
+    const allocated_slice = try allocator.dupe(u8, file_name);
+    try file_list.append(allocator, allocated_slice);
+    return file_list;
+}
+
+
+//******************************************************************************
+//* Function:    
+//*
+//* Description: 
+//******************************************************************************
+fn get_multi_file_filelist_for_playlist(
+    io : std.Io,
+    allocator : std.mem.Allocator,
+    parameter_string : []const u8,
+) !std.ArrayList([]const u8) {
+    // Chunking out the relevant strings from the playlist request. 
+    const current_dir_padded, const playlist_intermediary = std.mem.cutLast(u8, parameter_string, "/") orelse return error.ParsingNoSlashPresent;
+    const current_dir = current_dir_padded[1..current_dir_padded.len];
+    const start_time_itermediary0, const playlist_end = std.mem.cutLast(u8, playlist_intermediary, "=") orelse return error.ParsingNoEqualPresent;
+    _, const start_time_itermediary1 = std.mem.cut(u8, start_time_itermediary0, "=") orelse return error.ParsingNoSecondEqualPresent;
+    const playlist_start, _ = std.mem.cut(u8, start_time_itermediary1, "&") orelse return error.ParsingNoAmpersandPresent;
+
+    return try get_sorted_array_list_of_files(
+        io,
+        allocator,
+        current_dir,
+        playlist_start,
+        playlist_end
+    );
+}
+
+
+//******************************************************************************
+//* Function:    
+//*
+//* Description: 
+//******************************************************************************
+fn get_filelist_for_playlist(
+    io : std.Io,
+    allocator : std.mem.Allocator,
+    parameter_string : []const u8,
+) !std.ArrayList([]const u8) {
+    if (std.mem.endsWith(u8, parameter_string, "?m3u8")) {
+        const file_path, _ = std.mem.cutLast(u8, parameter_string, "?m3u8") orelse return error.MissingM3U8;
+        return try get_single_file_filelist_for_playlist(
+            allocator,
+            file_path,
+        );
+    }
+    else {
+        return try get_multi_file_filelist_for_playlist(
+            io,
+            allocator,
+            parameter_string,
+        );
+    }
+}
+
+
+//******************************************************************************
+//* Function:    
+//*
+//* Description: 
 //*
 //* Info: The current form of the string that would be passed to the function is:
 //  "/Archives/NewCamera_2527704881/?m3u8&start=20251207_1022&end=20251213_1022"
@@ -177,24 +248,13 @@ pub fn generate_and_get_playlist_file(
     allocator : std.mem.Allocator,
     parameter_string : []const u8
 ) !std.Io.File {
-
-    // Chunking out the relevant strings from the playlist request. 
-    const current_dir_padded, const playlist_intermediary = std.mem.cutLast(u8, parameter_string, "/") orelse return error.ParsingNoSlashPresent;
+    const current_dir_padded, _ = std.mem.cutLast(u8, parameter_string, "/") orelse return error.ParsingNoSlashPresent;
     const current_dir = current_dir_padded[1..current_dir_padded.len];
-    const start_time_itermediary0, const playlist_end = std.mem.cutLast(u8, playlist_intermediary, "=") orelse return error.ParsingNoEqualPresent;
-    _, const start_time_itermediary1 = std.mem.cut(u8, start_time_itermediary0, "=") orelse return error.ParsingNoSecondEqualPresent;
-    const playlist_start, _ = std.mem.cut(u8, start_time_itermediary1, "&") orelse return error.ParsingNoAmpersandPresent;
 
-    std.debug.print("Dir trying to get a playlist for: {s}\n", .{ current_dir });
-    std.debug.print("Start time for playlist: {s}\n", .{ playlist_start });
-    std.debug.print("End time for playlist: {s}\n", .{ playlist_end });
-
-    var file_list = try get_sorted_array_list_of_files(
+    var file_list = try get_filelist_for_playlist(
         io,
         allocator,
-        current_dir,
-        playlist_start,
-        playlist_end
+        parameter_string,
     );
     defer {
         for (file_list.items) |item| {
@@ -210,7 +270,7 @@ pub fn generate_and_get_playlist_file(
 
     //Create and write playlist file
     var backing_buffer_for_playlist_file_path : [128]u8 = undefined;
-    const playlist_file_path = try std.fmt.bufPrint(&backing_buffer_for_playlist_file_path, "{s}/.playlist.m3p8", .{ current_dir });
+    const playlist_file_path = try std.fmt.bufPrint(&backing_buffer_for_playlist_file_path, "{s}/.playlist.m3u8", .{ current_dir });
     std.log.debug("The path for the file that I'm trying to make (relevant to cwd) is: {s}\n", .{ current_dir });
     var playlist_file = try std.Io.Dir.createFile(.cwd(), io, playlist_file_path, .{ .read = true });
 
