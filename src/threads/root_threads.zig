@@ -101,19 +101,21 @@ pub fn accept(
     //Server established adding connections to queue for processing.
     while (true) {
         io.checkCancel() catch {
-            std.debug.print("Cancelling accept thread due to top level cancellation\n", .{});
-           return;
+            //std.debug.print("Cancelling accept thread due to top level cancellation\n", .{});
+            return;
         };
 
         //Handle acceptance of a stream.
         if (server.accept(io)) |stream| {
             queue.putOne(io, stream) catch {
-                std.debug.print("Aborting accept thead at queueing due to cancellation...\n", .{});
+                //std.debug.print("Aborting accept thead at queueing due to cancellation...\n", .{});
                 return;
             };
         }
         else |err| {
-            std.debug.print("Error received on connection acceptance in thread: {any}\n", .{ err });
+            if (err != error.Canceled) {
+                std.debug.print("Error received on connection acceptance in thread: {any}\n", .{ err });
+            }
             return;
         }
     }
@@ -137,10 +139,10 @@ pub fn connection_router(
     queue : *std.Io.Queue(std.Io.net.Stream),
     thread_num : u8,
 ) void {
-    std.debug.print("Thread {d} started...\n", .{thread_num});
+    //std.debug.print("Thread {d} started...\n", .{thread_num});
     while (true) {
         io.checkCancel() catch {
-            std.debug.print("Cancelling accept thread due to top level cancellation\n", .{});
+            //std.debug.print("Cancelling accept thread due to top level cancellation\n", .{});
             return;
         };
         //Handle acceptance of a stream.
@@ -179,7 +181,7 @@ pub fn connection_router(
             }
         }
         else |_| {
-            std.debug.print("Aborting parsing thead {d} at de-queueing due to cancellation...\n", .{ thread_num });
+            //std.debug.print("Aborting parsing thead {d} at de-queueing due to cancellation...\n", .{ thread_num });
             return;
         }
     }

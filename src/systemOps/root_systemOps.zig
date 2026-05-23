@@ -230,7 +230,7 @@ fn get_multi_file_filelist_for_playlist(
 //*
 //* Description: 
 //******************************************************************************
-fn get_filelist_for_playlist(
+pub fn get_filelist_for_playlist(
     io : std.Io,
     allocator : std.mem.Allocator,
     parameter_string : []const u8,
@@ -265,32 +265,12 @@ fn get_filelist_for_playlist(
 //    - The camera name we're querying
 //    - The start and end point of the duration we're looking to serve. 
 //******************************************************************************
-pub fn generate_and_get_playlist_file(
+pub fn populate_playlist_file(
     io : std.Io, 
-    allocator : std.mem.Allocator,
     playlist_file : *std.Io.File,
-    parameter_string : []const u8,
+    file_list : *std.ArrayList([]const u8),
     directory_string : []const u8,
 ) !void {
-
-    var file_list = try get_filelist_for_playlist(
-        io,
-        allocator,
-        parameter_string,
-    );
-    defer {
-        for (file_list.items) |item| {
-            allocator.free(item);
-        }
-        file_list.deinit(allocator);
-    }
-    std.log.debug("Debug point 0: De we get to the point of iterating over the list?\n", .{});
-    for (file_list.items) |item| {
-        std.debug.print("\t-- Item being added to playlist file: {s}\n", .{ item });
-    }
-    std.log.debug("Debug point 1: Do we iterate over the list?\n", .{});
-
-
     var backing_buffer_for_playlist_writer : [256]u8 = undefined;
     var playlist_file_writer_full = playlist_file.writer(io, &backing_buffer_for_playlist_writer);
     var playlist_file_writer = &playlist_file_writer_full.interface;
@@ -325,8 +305,6 @@ pub fn generate_and_get_playlist_file(
     }
     try playlist_file_writer.print("#EXT-X-ENDLIST\n", .{});
     try playlist_file_writer.flush();
-
-    std.log.debug("Done writing playlist file\n", .{});
 }
 
 fn get_sorted_array_list_of_files(

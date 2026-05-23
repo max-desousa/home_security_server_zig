@@ -52,7 +52,7 @@ pub fn main() !void {
 
     // Reading/establishing config file
     try config.establish_config(io);
-    std.log.debug("Desired Host from config: {s}\n", .{ config.get_desired_host() });
+    std.log.info("Desired Host from config: {s}", .{ config.get_desired_host() });
 
     //Create a server object - done here to simplify error union
 
@@ -78,11 +78,9 @@ pub fn main() !void {
 
     //Clean up all threads when program closes
     defer {
-        for (threads_to_close.items, 0..) |*future, i| {
-            std.log.debug("Cancelling thread: {d}\n", .{i});
+        for (threads_to_close.items) |*future| {
             _ = future.cancel(io);
         }
-        std.log.debug("Deiniting arraylist...\n", .{});
         threads_to_close.deinit(allocator);
     }
 

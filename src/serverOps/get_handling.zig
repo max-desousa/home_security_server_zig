@@ -257,36 +257,92 @@ fn is_video_file_request(stream : *ComplexStream) bool {
 
 
 //******************************************************************************
-//* Function: 
+//* Function: generate_and_serve_playlist
 //* 
-//* Description: 
+//* Description: Wrapper for a function that can fail to generate and serve
+//*              playlist. This lets us use try, and in the event of a failure,
+//*              we send and forget a page to the client with an error state so
+//*              that they know what's happening. 
 //******************************************************************************
 fn generate_and_serve_playlist(
     io : std.Io,
     allocator : std.mem.Allocator,
     stream : *ComplexStream,
 ) void {
-    const current_dir_padded, _ = std.mem.cutLast(u8, stream.header_target, "/") orelse unreachable;
-    const current_dir = current_dir_padded[1..current_dir_padded.len];
+    failable_generate_and_serve_playlist(io, allocator, stream) catch |err| {
+        var backing_buffer_for_playlist_failure : [512]u8 = undefined;
+        const error_msg = std.fmt.bufPrint(
+            &backing_buffer_for_playlist_failure,
+            "Could not generate/serve playlist file due to nested error: {any}",
+            .{ err }
+        ) catch return;
+        html.send_error_state(stream, error_msg);
+    };
+}
 
+//******************************************************************************
+//* Function: 
+//* 
+//* Description: 
+//******************************************************************************
+fn failable_generate_and_serve_playlist(
+    io : std.Io,
+    allocator : std.mem.Allocator,
+    stream : *ComplexStream,
+) !void {
+    //First step... clean up the request from stream.header_target to iron out
+    //the relative path we need for the file (with respect to cwd)
+    const target_dir_path_padded, _ = std.mem.cutLast(u8, stream.header_target, "/") orelse return error.BadPathNoSlash;
+    const target_dir_path = target_dir_path_padded[1..target_dir_path_padded.len];
+
+    //──────────────────────────────────────────────────────────────────────────
+
+    //Create string with relative path and filename to sort creation and
+    //deletion of temporary file
     var backing_buffer_for_playlist_file_path : [128]u8 = undefined;
-    const playlist_file_path = std.fmt.bufPrint(&backing_buffer_for_playlist_file_path, "{s}/.playlist.m3u8", .{ current_dir }) catch unreachable;
-    
+    const playlist_file_path = try std.fmt.bufPrint(&backing_buffer_for_playlist_file_path, "{s}/.playlist.m3u8", .{ target_dir_path });
+
     //Create and write playlist file
-    var playlist_file = std.Io.Dir.createFile(.cwd(), io, playlist_file_path, .{ .read = true }) catch unreachable;
-    defer std.Io.Dir.deleteFile(.cwd(), io, playlist_file_path) catch unreachable;
+    var playlist_file = try std.Io.Dir.createFile(
+        .cwd(),
+        io,
+        playlist_file_path,
+        .{ .read = true }
+    );
+    defer std.Io.Dir.deleteFile(.cwd(), io, playlist_file_path) catch {};
     defer playlist_file.close(io);
 
-    sysOps.generate_and_get_playlist_file(
+    //──────────────────────────────────────────────────────────────────────────
+    // Create an arraylist of the files that will need to be written to the
+    // playlist file. 
+    // This array list - depending on the request from the client could be
+    // lengthy, or it could be a single item. Using the arraylist lets us not
+    // rely on the client's player settings and we can send hls and keep our
+    // streaming process uniform. 
+    var file_list = try sysOps.get_filelist_for_playlist(
         io,
         allocator,
-        &playlist_file,
         stream.header_target,
-        current_dir,
-    ) catch |err| {
-        std.log.err("Encountered error creating playlist file: {any}\n", .{ err });
-        return;
-    };
+    );
+    defer {
+        for (file_list.items) |item| {
+            allocator.free(item);
+        }
+        file_list.deinit(allocator);
+    }
 
+    //──────────────────────────────────────────────────────────────────────────
+
+    //Populate the playlist with data. 
+    try sysOps.populate_playlist_file(
+        io,
+        &playlist_file,
+        &file_list,
+        target_dir_path,
+    );
+
+    //──────────────────────────────────────────────────────────────────────────
+
+    // Send the playlist to the client
     html.serve_file_2(io, stream, &playlist_file, "application/vnd.apple.mpegurl");
 }
