@@ -268,10 +268,10 @@ fn get_filelist_for_playlist(
 pub fn generate_and_get_playlist_file(
     io : std.Io, 
     allocator : std.mem.Allocator,
-    parameter_string : []const u8
-) !std.Io.File {
-    const current_dir_padded, _ = std.mem.cutLast(u8, parameter_string, "/") orelse return error.ParsingNoSlashPresent;
-    const current_dir = current_dir_padded[1..current_dir_padded.len];
+    playlist_file : *std.Io.File,
+    parameter_string : []const u8,
+    directory_string : []const u8,
+) !void {
 
     var file_list = try get_filelist_for_playlist(
         io,
@@ -290,11 +290,6 @@ pub fn generate_and_get_playlist_file(
     }
     std.log.debug("Debug point 1: Do we iterate over the list?\n", .{});
 
-    //Create and write playlist file
-    var backing_buffer_for_playlist_file_path : [128]u8 = undefined;
-    const playlist_file_path = try std.fmt.bufPrint(&backing_buffer_for_playlist_file_path, "{s}/.playlist.m3u8", .{ current_dir });
-    std.log.debug("The path for the file that I'm trying to make (relevant to cwd) is: {s}\n", .{ current_dir });
-    var playlist_file = try std.Io.Dir.createFile(.cwd(), io, playlist_file_path, .{ .read = true });
 
     var backing_buffer_for_playlist_writer : [256]u8 = undefined;
     var playlist_file_writer_full = playlist_file.writer(io, &backing_buffer_for_playlist_writer);
@@ -326,15 +321,12 @@ pub fn generate_and_get_playlist_file(
 
         try playlist_file_writer.print("#EXTINF:{d}.0,\n", .{ duration });
         //try playlist_file_writer.print("{s}\n", .{ item });
-        try playlist_file_writer.print("/{s}/{s}\n", .{ current_dir, item });
+        try playlist_file_writer.print("/{s}/{s}\n", .{ directory_string, item });
     }
     try playlist_file_writer.print("#EXT-X-ENDLIST\n", .{});
     try playlist_file_writer.flush();
 
     std.log.debug("Done writing playlist file\n", .{});
-
-    //Returning the populated file so that it can be served to the client.
-    return playlist_file;
 }
 
 fn get_sorted_array_list_of_files(

@@ -266,14 +266,27 @@ fn generate_and_serve_playlist(
     allocator : std.mem.Allocator,
     stream : *ComplexStream,
 ) void {
-    var file = sysOps.generate_and_get_playlist_file(
+    const current_dir_padded, _ = std.mem.cutLast(u8, stream.header_target, "/") orelse unreachable;
+    const current_dir = current_dir_padded[1..current_dir_padded.len];
+
+    var backing_buffer_for_playlist_file_path : [128]u8 = undefined;
+    const playlist_file_path = std.fmt.bufPrint(&backing_buffer_for_playlist_file_path, "{s}/.playlist.m3u8", .{ current_dir }) catch unreachable;
+    
+    //Create and write playlist file
+    var playlist_file = std.Io.Dir.createFile(.cwd(), io, playlist_file_path, .{ .read = true }) catch unreachable;
+    defer std.Io.Dir.deleteFile(.cwd(), io, playlist_file_path) catch unreachable;
+    defer playlist_file.close(io);
+
+    sysOps.generate_and_get_playlist_file(
         io,
         allocator,
+        &playlist_file,
         stream.header_target,
+        current_dir,
     ) catch |err| {
         std.log.err("Encountered error creating playlist file: {any}\n", .{ err });
         return;
     };
-    defer file.close(io);
-    html.serve_file_2(io, stream, &file, "application/vnd.apple.mpegurl");
+
+    html.serve_file_2(io, stream, &playlist_file, "application/vnd.apple.mpegurl");
 }
