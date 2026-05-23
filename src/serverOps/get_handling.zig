@@ -90,7 +90,7 @@ pub fn generic_getter(
                 "text/html; charset=utf-8",
             );
         },
-        .Directory => html.generate_and_serve_directory_html(io, stream),
+        .Directory => html.generate_and_serve_directory_html(io, allocator, stream),
         .Playlist_PlayerSetup => {
             html.serve_file_from_path(
                 io,
