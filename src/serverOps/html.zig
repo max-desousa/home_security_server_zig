@@ -2,6 +2,8 @@ const std = @import("std");
 const ComplexStream = @import("complexStream");
 const sysOps = @import("sysOps");
 
+const HTML_FILE_TO_SERVE = ".html_to_serve.html";
+
 pub fn serve_file(
     io : std.Io,
     stream : *ComplexStream,
@@ -29,16 +31,19 @@ pub fn serve_file(
 pub fn generate_and_serve_directory_html(io : std.Io, stream : *ComplexStream) void {
     //Try creating file to generate html into if failure - respond negative response
     var file = std.Io.Dir.createFile(
-            .cwd(),
-            io,
-            ".html_to_serve.html",
-            .{
-                .read = true,
-                .lock = .exclusive,
-            }
+        .cwd(),
+        io,
+        HTML_FILE_TO_SERVE,
+        .{
+            .read = true,
+            .lock = .exclusive,
+        }
     ) catch {
         send_error_state(stream, "Backing file could not be secured");
         return;
+    };
+    defer std.Io.Dir.deleteFile(.cwd(), io, HTML_FILE_TO_SERVE) catch |err| {
+        std.log.err("Could not delete the temporary file used for html view of directory due to error: {any}", .{ err });
     };
     defer file.close(io);
 
