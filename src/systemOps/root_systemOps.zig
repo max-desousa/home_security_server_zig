@@ -53,17 +53,22 @@ pub fn request_is_directory(io : std.Io, stream : *ComplexStream) bool {
 //******************************************************************************
 pub fn generate_html_for_folder(
     io : std.Io,
+    allocator : std.mem.Allocator,
     html_file : *std.Io.File,
     path : []const u8
 ) !void {
-    var buffer_html_file_writer : [2048]u8 = undefined;
-    var html_file_writer = html_file.writer(io, &buffer_html_file_writer);
-    defer html_file_writer.interface.flush() catch {};
-
-    try html_file_writer.interface.writeAll(html_preamble);
-    try html_file_writer.interface.print("<script>start(\"{s}\");</script>\n", .{ path[1..path.len] });
-    try html_file_writer.interface.print("<script>onHasParentDirectory();</script>\n", .{});
-    defer html_file_writer.interface.print("<script>finalizeDirectory();</script>\n", .{}) catch {};
+    var file_list : std.ArrayList([]const u8) = .empty;
+    var dir_list : std.ArrayList([]const u8) = .empty;
+    defer {
+        for (file_list.items) |item| {
+            allocator.free(item);
+        }
+        for (dir_list.items) |item| {
+            allocator.free(item);
+        }
+        file_list.deinit(allocator);
+        dir_list.deinit(allocator);
+    }
 
     var dir_to_scan = try std.Io.Dir.openDir(
         .cwd(),
@@ -76,31 +81,48 @@ pub fn generate_html_for_folder(
     );
     defer dir_to_scan.close(io);
 
-    var dir_iterator = dir_to_scan.iterate();
+    try generate_list_of_files_in_dir_path(io, allocator, &dir_to_scan, &file_list, &dir_list);
 
-    while (dir_iterator.next(io)) |nullable_entry| {
-        const entry = nullable_entry orelse break;
-        var backing_buffer_date_modified_string : [254]u8 = undefined;
-        switch (entry.kind) {
-            .file => {
-                const file_stat = try std.Io.Dir.statFile(dir_to_scan, io, entry.name, .{});
-                var backing_buffer_file_size_string : [64]u8 = undefined;
-                const file_size_string = try file_bytes_to_abbreviated_string(
-                    file_stat.size, 
-                    &backing_buffer_file_size_string
-                );
-                const time_stamp_string = try timestamp_to_string(file_stat.mtime, &backing_buffer_date_modified_string);
-                try html_file_writer.interface.print("<script>addRow(\"{s}\",\"{s}\",0,{d},\"{s}\",{d},\"{s}\");</script>\n", .{ entry.name, entry.name, file_stat.size, file_size_string, file_stat.mtime.nanoseconds, time_stamp_string });
-            },
-            .directory => {
-                try html_file_writer.interface.print("<script>addRow(\"{s}\",\"{s}\",1,4096,\"4.0 kB\",0,\"99/99/99, 00:00:00 PM\");</script>\n", .{ entry.name, entry.name });
-            },
-            else => continue,
-        }
+    var buffer_html_file_writer : [2048]u8 = undefined;
+    var html_file_writer = html_file.writer(io, &buffer_html_file_writer);
+    defer html_file_writer.interface.flush() catch {};
+
+    try html_file_writer.interface.writeAll(html_preamble);
+    try html_file_writer.interface.print("<script>start(\"{s}\");</script>\n", .{ path[1..path.len] });
+    try html_file_writer.interface.print("<script>onHasParentDirectory();</script>\n", .{});
+    defer html_file_writer.interface.print("<script>finalizeDirectory();</script>\n", .{}) catch {};
+
+    var backing_buffer_date_modified_string : [254]u8 = undefined;
+
+    for (dir_list.items) |item| {
+        try html_file_writer.interface.print(
+            "<script>addRow(\"{s}\",\"{s}\",1,4096,\"4.0 kB\",0,\"99/99/99, 00:00:00 PM\");</script>\n", 
+            .{ 
+                item,
+                item,
+            }
+        );
     }
-    else |err| {
-        std.log.err("Error iterating over dir during html file generation: {any}\n", .{ err });
-        return err;
+
+    for (file_list.items) |item| {
+        const file_stat = try std.Io.Dir.statFile(dir_to_scan, io, item, .{});
+        var backing_buffer_file_size_string : [64]u8 = undefined;
+        const file_size_string = try file_bytes_to_abbreviated_string(
+            file_stat.size, 
+            &backing_buffer_file_size_string
+        );
+        const time_stamp_string = try timestamp_to_string(file_stat.mtime, &backing_buffer_date_modified_string);
+        try html_file_writer.interface.print(
+            "<script>addRow(\"{s}\",\"{s}\",0,{d},\"{s}\",{d},\"{s}\");</script>\n",
+            .{ 
+                item,
+                item,
+                file_stat.size,
+                file_size_string,
+                file_stat.mtime.nanoseconds,
+                time_stamp_string
+            }
+        );
     }
 }
 
@@ -208,7 +230,7 @@ fn get_multi_file_filelist_for_playlist(
 //*
 //* Description: 
 //******************************************************************************
-fn get_filelist_for_playlist(
+pub fn get_filelist_for_playlist(
     io : std.Io,
     allocator : std.mem.Allocator,
     parameter_string : []const u8,
@@ -243,37 +265,12 @@ fn get_filelist_for_playlist(
 //    - The camera name we're querying
 //    - The start and end point of the duration we're looking to serve. 
 //******************************************************************************
-pub fn generate_and_get_playlist_file(
+pub fn populate_playlist_file(
     io : std.Io, 
-    allocator : std.mem.Allocator,
-    parameter_string : []const u8
-) !std.Io.File {
-    const current_dir_padded, _ = std.mem.cutLast(u8, parameter_string, "/") orelse return error.ParsingNoSlashPresent;
-    const current_dir = current_dir_padded[1..current_dir_padded.len];
-
-    var file_list = try get_filelist_for_playlist(
-        io,
-        allocator,
-        parameter_string,
-    );
-    defer {
-        for (file_list.items) |item| {
-            allocator.free(item);
-        }
-        file_list.deinit(allocator);
-    }
-    std.log.debug("Debug point 0: De we get to the point of iterating over the list?\n", .{});
-    for (file_list.items) |item| {
-        std.debug.print("\t-- Item being added to playlist file: {s}\n", .{ item });
-    }
-    std.log.debug("Debug point 1: Do we iterate over the list?\n", .{});
-
-    //Create and write playlist file
-    var backing_buffer_for_playlist_file_path : [128]u8 = undefined;
-    const playlist_file_path = try std.fmt.bufPrint(&backing_buffer_for_playlist_file_path, "{s}/.playlist.m3u8", .{ current_dir });
-    std.log.debug("The path for the file that I'm trying to make (relevant to cwd) is: {s}\n", .{ current_dir });
-    var playlist_file = try std.Io.Dir.createFile(.cwd(), io, playlist_file_path, .{ .read = true });
-
+    playlist_file : *std.Io.File,
+    file_list : *std.ArrayList([]const u8),
+    directory_string : []const u8,
+) !void {
     var backing_buffer_for_playlist_writer : [256]u8 = undefined;
     var playlist_file_writer_full = playlist_file.writer(io, &backing_buffer_for_playlist_writer);
     var playlist_file_writer = &playlist_file_writer_full.interface;
@@ -304,15 +301,10 @@ pub fn generate_and_get_playlist_file(
 
         try playlist_file_writer.print("#EXTINF:{d}.0,\n", .{ duration });
         //try playlist_file_writer.print("{s}\n", .{ item });
-        try playlist_file_writer.print("/{s}/{s}\n", .{ current_dir, item });
+        try playlist_file_writer.print("/{s}/{s}\n", .{ directory_string, item });
     }
     try playlist_file_writer.print("#EXT-X-ENDLIST\n", .{});
     try playlist_file_writer.flush();
-
-    std.log.debug("Done writing playlist file\n", .{});
-
-    //Returning the populated file so that it can be served to the client.
-    return playlist_file;
 }
 
 fn get_sorted_array_list_of_files(
@@ -379,4 +371,43 @@ fn get_sorted_array_list_of_files(
 //******************************************************************************
 fn file_sorting_less_than(_ : void,  a : []const u8, b: []const u8) bool {
     return std.mem.lessThan(u8, a, b);
+}
+
+
+//******************************************************************************
+//* Function:    
+//*
+//* Description: 
+//******************************************************************************
+fn generate_list_of_files_in_dir_path(
+    io : std.Io,
+    allocator : std.mem.Allocator,
+    dir_to_scan : *std.Io.Dir,
+    file_list : *std.ArrayList([]const u8),
+    dir_list : *std.ArrayList([]const u8),
+) !void {
+    var dir_iterator = dir_to_scan.iterate();
+
+    while (dir_iterator.next(io)) |nullable_entry| {
+        const entry = nullable_entry orelse break;
+        if (entry.name[0] == '.') continue;
+        switch (entry.kind) {
+            .file => {
+                const allocated_slice = try std.mem.Allocator.dupe(allocator, u8, entry.name);
+                try file_list.append(allocator, allocated_slice);
+            },
+            .directory => {
+                const allocated_slice = try std.mem.Allocator.dupe(allocator, u8, entry.name);
+                try dir_list.append(allocator, allocated_slice);
+            },
+            else => continue,
+        }
+    }
+    else |err| {
+        std.log.err("Could not iterate over dir while trying to generate html due to err: {any}", .{ err });
+        return err;
+    }
+
+    std.mem.sort([]const u8, file_list.items, {}, file_sorting_less_than);
+    std.mem.sort([]const u8, dir_list.items, {}, file_sorting_less_than);
 }

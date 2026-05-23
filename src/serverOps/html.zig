@@ -2,6 +2,8 @@ const std = @import("std");
 const ComplexStream = @import("complexStream");
 const sysOps = @import("sysOps");
 
+const HTML_FILE_TO_SERVE = ".html_to_serve.html";
+
 pub fn serve_file(
     io : std.Io,
     stream : *ComplexStream,
@@ -26,23 +28,30 @@ pub fn serve_file(
 //*
 //* Description: 
 //******************************************************************************
-pub fn generate_and_serve_directory_html(io : std.Io, stream : *ComplexStream) void {
+pub fn generate_and_serve_directory_html(
+    io : std.Io,
+    allocator : std.mem.Allocator,
+    stream : *ComplexStream
+) void {
     //Try creating file to generate html into if failure - respond negative response
     var file = std.Io.Dir.createFile(
-            .cwd(),
-            io,
-            ".html_to_serve.html",
-            .{
-                .read = true,
-                .lock = .exclusive,
-            }
+        .cwd(),
+        io,
+        HTML_FILE_TO_SERVE,
+        .{
+            .read = true,
+            .lock = .exclusive,
+        }
     ) catch {
         send_error_state(stream, "Backing file could not be secured");
         return;
     };
+    defer std.Io.Dir.deleteFile(.cwd(), io, HTML_FILE_TO_SERVE) catch |err| {
+        std.log.err("Could not delete the temporary file used for html view of directory due to error: {any}", .{ err });
+    };
     defer file.close(io);
 
-    sysOps.generate_html_for_folder(io, &file, stream.fs_adjusted_target) catch |err| {
+    sysOps.generate_html_for_folder(io, allocator, &file, stream.fs_adjusted_target) catch |err| {
         std.log.err("Failed dir html generation due to error {any}\n", .{ err });
         send_error_state(stream, "Error generating your view of the directory");
     };
