@@ -75,8 +75,9 @@ fn archive_payload(
     }
 
     //const folder_status = ensure_directory_exists(io, archive_path) catch {
-    //    @panic("TODO: handle inability to create folder to house archive files\n");
-    //};
+    _ = ensure_directory_exists(io, archive_path) catch {
+        @panic("TODO: handle inability to create folder to house archive files\n");
+    };
 
     // Trying to create the file descriptor that we'll write/archive to
     const new_file = std.Io.Dir.createFile(.cwd(), io, archive_path, .{}) catch |err| {
