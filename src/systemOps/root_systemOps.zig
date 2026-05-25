@@ -309,6 +309,49 @@ pub fn populate_playlist_file(
     try playlist_file_writer.flush();
 }
 
+/// New preferred path: generate the full m3u8 content into an ArrayList (in-memory).
+/// This removes all temp file complexity for playlists.
+pub fn build_playlist_in_memory(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    file_list : *std.ArrayList([]const u8),
+    directory_string : []const u8,
+) !void {
+    const max_video_duration = try get_maximum_duration_of_video_from_list(file_list);
+
+    try out.appendSlice(allocator, "#EXTM3U\n");
+    try out.appendSlice(allocator, "#EXT-X-VERSION:3\n");
+
+    var dur_buf: [32]u8 = undefined;
+    const dur_str = try std.fmt.bufPrint(&dur_buf, "#EXT-X-TARGETDURATION:{d}\n", .{max_video_duration});
+    try out.appendSlice(allocator, dur_str);
+
+    try out.appendSlice(allocator, "#EXT-X-MEDIA-SEQUENCE:0\n");
+    try out.appendSlice(allocator, "#EXT-X-PLAYLIST-TYPE:VOD\n\n");
+
+    for (file_list.items) |item| {
+        std.log.debug("Working on adding item to playlist: {s}\n", .{ item });
+
+        const base_name, _ = std.mem.cutLast(u8, item, ".") orelse return error.DurationCalc0;
+        const intermediary, const end_seconds_string = std.mem.cutLast(u8, base_name, "_") orelse return error.DurationCalc1;
+        _, const start_seconds_string = std.mem.cutLast(u8, intermediary, "_") orelse return error.DurationCalc2;
+
+        const start_seconds = try std.fmt.parseInt(u8, start_seconds_string, 10);
+        const end_seconds = try std.fmt.parseInt(u8, end_seconds_string, 10);
+
+        const duration = @max(start_seconds, end_seconds) - @min(start_seconds, end_seconds);
+
+        var line_buf: [128]u8 = undefined;
+        const extinf = try std.fmt.bufPrint(&line_buf, "#EXTINF:{d}.0,\n", .{duration});
+        try out.appendSlice(allocator, extinf);
+
+        const uri_line = try std.fmt.bufPrint(&line_buf, "/{s}/{s}\n", .{ directory_string, item });
+        try out.appendSlice(allocator, uri_line);
+    }
+
+    try out.appendSlice(allocator, "#EXT-X-ENDLIST\n");
+}
+
 fn get_sorted_array_list_of_files(
     io : std.Io,
     allocator : std.mem.Allocator,

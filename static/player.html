@@ -72,9 +72,16 @@
                 debug: false,
                 enableWorker: true,
                 lowLatencyMode: false,
-                backBufferLength: 120,
-                maxBufferLength: 240,
-                maxMaxBufferLength: 300,
+                // Very generous buffers + tolerance for heavy scrubbing on VOD
+                backBufferLength: 600,
+                maxBufferLength: 1200,
+                maxMaxBufferLength: 1800,
+                maxFragLookUpTolerance: 3,
+                startPosition: -1,
+                // Make hls.js more willing to keep going after transient segment problems
+                fragLoadingTimeOut: 20000,
+                fragLoadingMaxRetry: 4,
+                manifestLoadingTimeOut: 20000,
             });
 
             hls.loadSource(playlistUrl);
@@ -83,7 +90,33 @@
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
                 console.log("✅ HLS Manifest loaded - seeking should work");
                 titleEl.textContent = "Now Playing";
-                video.controls = true;           // Force native controls
+                video.controls = true;
+            });
+
+            // Give the player a better chance to recover from transient segment issues
+            hls.on(Hls.Events.ERROR, (_event, data) => {
+                if (data.fatal) {
+                    console.warn("HLS fatal error, attempting recovery...", data);
+                    switch (data.type) {
+                        case Hls.ErrorTypes.NETWORK_ERROR:
+                            console.log("Trying to recover from network error...");
+                            hls.startLoad();
+                            break;
+                        case Hls.ErrorTypes.MEDIA_ERROR:
+                            console.log("Trying to recover from media error...");
+                            hls.recoverMediaError();
+                            break;
+                        default:
+                            // Last resort
+                            console.log("Unrecoverable fatal error - destroying and reloading source");
+                            hls.destroy();
+                            // The player page will need a manual reload in bad cases
+                            break;
+                    }
+                } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                    // Try to recover non-fatal media errors quickly
+                    hls.recoverMediaError();
+                }
             });
 
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
