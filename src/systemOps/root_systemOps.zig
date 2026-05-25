@@ -274,12 +274,14 @@ pub fn populate_playlist_file(
     var backing_buffer_for_playlist_writer : [256]u8 = undefined;
     var playlist_file_writer_full = playlist_file.writer(io, &backing_buffer_for_playlist_writer);
     var playlist_file_writer = &playlist_file_writer_full.interface;
+    
+    const max_video_duration = try get_maximum_duration_of_video_from_list(file_list);
 
     //Here we are actually writing the playlist file - eveything before this
     //was setup. 
     try playlist_file_writer.print("#EXTM3U\n", .{});
     try playlist_file_writer.print("#EXT-X-VERSION:3\n", .{});
-    try playlist_file_writer.print("#EXT-X-TARGETDURATION:10\n", .{});
+    try playlist_file_writer.print("#EXT-X-TARGETDURATION:{d}\n", .{ max_video_duration });
     try playlist_file_writer.print("#EXT-X-MEDIA-SEQUENCE:0\n", .{});
     try playlist_file_writer.print("#EXT-X-PLAYLIST-TYPE:VOD\n\n", .{});
     for (file_list.items) |item| {
@@ -410,4 +412,39 @@ fn generate_list_of_files_in_dir_path(
 
     std.mem.sort([]const u8, file_list.items, {}, file_sorting_less_than);
     std.mem.sort([]const u8, dir_list.items, {}, file_sorting_less_than);
+}
+
+
+//******************************************************************************
+//* Function:    
+//*
+//* Description: 
+//******************************************************************************
+fn get_maximum_duration_of_video_from_list(
+    file_list : *std.ArrayList([]const u8),
+) !u64 {
+    var max_length : u64 = 0;
+    for (file_list.items) |item| {
+        const stripped_file_name, _ = std.mem.cutLast(u8, item, ".") orelse return error.NoExtentsion;
+        const stripped_end_time, const end_time_string = std.mem.cutLast(
+            u8,
+            stripped_file_name,
+            "_"
+        ) orelse return error.NoSlash01;
+
+        _, const start_time_string = std.mem.cutLast(
+            u8,
+            stripped_end_time,
+            "_"
+        ) orelse return error.NoSlash02;
+
+        const start_time = try std.fmt.parseInt(u64, start_time_string, 10);
+        const end_time = try std.fmt.parseInt(u64, end_time_string, 10);
+
+        const time_difference = @max(start_time, end_time) - @min(start_time, end_time);
+        
+        if (time_difference > max_length) max_length = time_difference;
+    }
+
+    return max_length;
 }
