@@ -72,9 +72,29 @@
                 debug: false,
                 enableWorker: true,
                 lowLatencyMode: false,
-                backBufferLength: 120,
-                maxBufferLength: 240,
-                maxMaxBufferLength: 300,
+
+                // === Tuned aggressively for Firefox + heavy scrubbing death spirals ===
+                // These values are deliberately high to give hls.js more time to recover
+                // before it starts the "endless request storm" visible in the HAR.
+                backBufferLength: 900,
+                maxBufferLength: 1800,
+                maxMaxBufferLength: 2400,
+
+                // Very tolerant of holes that appear during rapid seeking
+                maxBufferHole: 6.0,
+                maxFragLookUpTolerance: 5,
+
+                // Much more patient with individual fragment loads during recovery
+                fragLoadingTimeOut: 30000,
+                fragLoadingMaxRetry: 6,
+                fragLoadingRetryDelay: 500,
+                fragLoadingMaxRetryTimeout: 120000,
+
+                manifestLoadingTimeOut: 30000,
+                manifestLoadingMaxRetry: 4,
+
+                // Start position handling for VOD
+                startPosition: -1,
             });
 
             hls.loadSource(playlistUrl);
@@ -83,7 +103,21 @@
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
                 console.log("✅ HLS Manifest loaded - seeking should work");
                 titleEl.textContent = "Now Playing";
-                video.controls = true;           // Force native controls
+                video.controls = true;
+            });
+
+            // Extra visibility into the exact failure mode the user is seeing in the HAR
+            hls.on(Hls.Events.ERROR, function(event, data) {
+                if (data.fatal) {
+                    console.error("HLS FATAL ERROR:", data.type, data.details, data);
+                } else {
+                    console.warn("HLS non-fatal error:", data.type, data.details);
+                }
+            });
+
+            // Log when the buffer is getting dangerously low (early warning of the storm)
+            hls.on(Hls.Events.BUFFER_STALLED, function() {
+                console.warn("HLS: Buffer stalled — player is about to enter heavy re-request mode");
             });
 
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
