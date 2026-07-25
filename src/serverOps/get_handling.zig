@@ -15,6 +15,7 @@ const RequestType = enum {
     Playlist_PlayerSetup,
     Playlist_StreamCalculated,
     Playlist_StreamSingleFile,
+    Static,
 };
 
 
@@ -29,6 +30,20 @@ fn classify_request_type(
 ) ?RequestType {
     //Is the request a home page?
     if (std.mem.eql(u8, stream.header_target, "/")) return .Home;
+
+    //Checking if the request is a static html file:
+    var path_buffer : [1024]u8 = undefined;
+    const path_string = std.fmt.bufPrint(&path_buffer, "static{s}.html", .{ stream.header_target }) catch { 
+        @panic("TODO: how do I want to handle buffer failures while looking for static html?");
+    };
+    const is_static : bool = blk: {
+        std.debug.print("The path_string being evaluated is: \"{s}\"\n", .{ path_string });
+        _ = std.Io.Dir.statFile(.cwd(), io, path_string, .{ .follow_symlinks = false }) catch {
+            break :blk false;
+        };
+        break :blk true;
+    };
+    if (is_static) return .Static;
 
     // Checking if the request is a directory
     if (sysOps.request_is_directory(io, stream)) return .Directory;
@@ -110,7 +125,7 @@ pub fn generic_getter(
             );
         },
         .Playlist_StreamSingleFile => generate_and_serve_playlist(io, allocator, stream),
-
+        .Static => @panic("We hit the static branch"),
         //.File_NotVideo => {
         //    html.serve_file_from_path(
         //        io, 

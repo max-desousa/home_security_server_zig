@@ -21,3 +21,16 @@ pub fn is_client_recognized_camera(
     }
     return false;
 }
+
+pub fn send_client_to_login(stream : *ComplexStream) !void {
+    try stream.request.respond(
+        "",
+        .{
+            .status = .found,
+            .keep_alive = false,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "/login" },
+            },
+        }
+    );
+}

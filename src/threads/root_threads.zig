@@ -172,10 +172,17 @@ pub fn connection_router(
                 continue;
             };
 
-            const validClient : bool = serverOps.general.is_client_recognized_camera(&complex_stream);
-            if (!validClient) {
-                @panic("TODO: send rejection due to client not being in the client log");
+            if (!std.mem.eql(u8, complex_stream.header_target, "/login")) {
+                const validClient : bool = serverOps.general.is_client_recognized_camera(&complex_stream);
+                if (!validClient) {
+                    serverOps.general.send_client_to_login(&complex_stream) catch {
+                        @panic("TODO: how do I want to handle failing to redirect?");
+                    };
+                    continue;
+                    //@panic("TODO: send rejection due to client not being in the client log");
+                }
             }
+
 
             switch(method) {
                 .GET => serverOps.get.generic_getter(io, allocator, &complex_stream),
