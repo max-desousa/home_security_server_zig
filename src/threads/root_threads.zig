@@ -172,6 +172,11 @@ pub fn connection_router(
                 continue;
             };
 
+            const validClient : bool = serverOps.general.is_client_recognized_camera(&complex_stream);
+            if (!validClient) {
+                @panic("TODO: send rejection due to client not being in the client log");
+            }
+
             switch(method) {
                 .GET => serverOps.get.generic_getter(io, allocator, &complex_stream),
                 .POST => serverOps.post.generic_poster(allocator, io, &complex_stream), 

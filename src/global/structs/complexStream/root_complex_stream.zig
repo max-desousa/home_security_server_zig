@@ -29,6 +29,9 @@ backing_buffer_for_target : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([
 header_target : []u8 = undefined,
 header_method : ?std.http.Method = null,
 
+//We need a field to parse the header and store the user's cookies.
+cookie_token : ?[]u8 = null,
+
 backing_buffer_for_fs_adjusted_target : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([BUFFER_SIZE_FOR_HEADER_FIELDS]u8),
 fs_adjusted_target : []u8 = undefined,
 
@@ -86,6 +89,17 @@ fn cache_headers(self : *Self) !void {
     @memcpy(self.backing_buffer_for_target[0..self.request.head.target.len], self.request.head.target);
     self.header_target = self.backing_buffer_for_target[0..self.request.head.target.len];
     std.log.debug("Header target is: {s}\n", .{ self.header_target });
+
+    //Here we will evaluate cookies if there are any:
+    var headerIterator = self.request.iterateHeaders();
+    while (headerIterator.next()) |entry| {
+        std.debug.print("--- New header found ---\n", .{});
+        std.debug.print("\tEntry.name: {s}\n", .{ entry.name });
+        std.debug.print("\tEntry.value: {s}\n", .{ entry.value });
+        if (std.mem.eql(u8, entry.name, "Cookie")) {
+            std.debug.print("Cookie found from browser!\n", .{});
+        }
+    }
 }
 
 
