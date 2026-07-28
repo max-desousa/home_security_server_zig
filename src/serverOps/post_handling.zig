@@ -21,6 +21,10 @@ pub fn generic_poster(
         std.log.debug("Post request IS video archival\n", .{});
         archive_payload(allocator, io, stream);
     }
+    else if (std.mem.eql(u8, stream.header_target, "/login")) {
+        std.debug.print("We are in the login POST!\n", .{});
+        temporary_print_contents(io, allocator, stream);
+    }
     else {
         std.log.debug("Post request is something other than a video archival\n", .{});
         std.log.debug("\tHeader target is {s}\n", .{ stream.header_target });
@@ -169,4 +173,40 @@ fn ensure_directory_exists(io : std.Io, archive_path : []const u8) !std.Io.Dir.C
     };
 
     return try std.Io.Dir.createDirPathStatus(.cwd(), io, directory, .default_dir);
+}
+
+
+//******************************************************************************
+//******************************************************************************
+fn temporary_print_contents(
+    io : std.Io,
+    allocator : std.mem.Allocator,
+    stream : *ComplexStream,
+) void {
+    _ = &allocator;
+    _ = &io;
+    //var reader_backing_buffer : [512]u8 = undefined;
+    //var reader = stream.stream.reader(io, &reader_backing_buffer);
+
+    var bytes_remaining : u64 = blk: {
+        if (stream.content_length) |len| { break :blk len; }
+        else { return; }
+    };
+
+    std.debug.print("Buffered Content:\n", .{});
+    while(bytes_remaining > 0) {
+        const bytes_to_read = @min(bytes_remaining, 512);
+        defer {
+            if (bytes_to_read > bytes_remaining) {
+                bytes_remaining = 0;
+            }
+            else {
+                bytes_remaining = bytes_remaining - bytes_to_read;
+            }
+        }
+        stream.raw_stream_reader.interface.fill(bytes_to_read) catch return;
+        defer stream.raw_stream_reader.interface.tossBuffered();
+        std.debug.print("{s}", .{ stream.raw_stream_reader.interface.buffered() });
+
+    }
 }

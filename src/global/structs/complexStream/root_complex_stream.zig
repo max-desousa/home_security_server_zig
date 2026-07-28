@@ -29,6 +29,8 @@ backing_buffer_for_target : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([
 header_target : []u8 = undefined,
 header_method : ?std.http.Method = null,
 
+content_length : ?u64 = null,
+
 //We need a field to parse the header and store the user's cookies.
 cookie_token : ?[]u8 = null,
 
@@ -71,6 +73,9 @@ pub fn setup(
 //******************************************************************************
 fn cache_headers(self : *Self) !void {
     self.request = try self.server.receiveHead();
+    if (self.request.head.content_length) |len| {
+        self.content_length = len;
+    }
     self.header_method = self.request.head.method;
     if (1 == self.request.head.target.len) {
         self.fs_adjusted_target = std.fmt.bufPrint(
