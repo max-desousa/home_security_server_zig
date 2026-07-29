@@ -4,6 +4,12 @@ const sysOps = @import("sysOps");
 
 const HTML_FILE_TO_SERVE = ".html_to_serve.html";
 
+//******************************************************************************
+//* Function:    serve_file
+//*
+//* Description: Simple function that takes a stream and serves a static file
+//               from the file system back on the stream.
+//******************************************************************************
 pub fn serve_file(
     io : std.Io,
     stream : *ComplexStream,
@@ -24,9 +30,73 @@ pub fn serve_file(
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    serve_file_2
 //*
-//* Description: 
+//* Description: This is an alternate implementation of the serve_file function
+//               with 3 notable differences.
+//                 1. This function does not return an error union.
+//                 2. This version allows for manipulating the content type of 
+//                    the response so the function is a little more flexible.
+//                 3. The file served isn't via a path but the file object
+//******************************************************************************
+pub fn serve_file_2(
+    io : std.Io,
+    stream : *ComplexStream,
+    file : *std.Io.File,
+    content_type : []const u8
+) void {
+    var backing_buffer_for_response : [1024]u8 = undefined;
+    var body_writer = stream.request.respondStreaming(
+        &backing_buffer_for_response,
+        .{
+            .respond_options = .{
+                .extra_headers = &.{
+                    //.{ .name = "Content-Type", .value = "text/html; charset=utf-8" },
+                    .{ .name = "Content-Type", .value = content_type },
+                },
+            },
+        },
+    ) catch |err| {
+        std.debug.print("Error: \"{any}\" occurred when attempting to respond to the client", .{ err });
+        @panic("TODO: What do you do when you can not respond to request?");
+    };
+    defer body_writer.end() catch {};
+
+    var backing_buffer_for_reader : [1024]u8 = std.mem.zeroes([1024]u8);
+    var file_reader = file.reader(io, &backing_buffer_for_reader);
+
+    if (file_reader.atEnd()) {
+        std.log.err("My Reader indicates that we are at the end of the file\n", .{});
+    }
+    else {
+        std.log.debug("Not at end of file. The position of the reader before starting is: {d}\n", .{ file_reader.pos });
+    }
+    while (true) {
+        file_reader.interface.fillMore() catch |err| {
+            std.log.err("Error reading from file: {any}\n", .{ err });
+            break;
+        };
+        defer file_reader.interface.toss(file_reader.interface.bufferedLen());
+        std.log.debug("We did read at least once successfully\n", .{});
+
+        if (0 == file_reader.interface.buffer.len) break;
+
+        body_writer.writer.writeAll(backing_buffer_for_reader[0..file_reader.interface.bufferedLen()]) catch |err| {
+            std.log.err("Error writing to stream: {any}\n", .{ err });
+            break;
+        };
+    }
+}
+
+
+//******************************************************************************
+//* Function:    generate_and_serve_directory_html
+//*
+//* Description: wrapper function that does the following:
+//                 1. Generates an temporary file
+//                 2. Populates the temporary file with html that offers the
+//                    client the ability to see the folder contents
+//                 3. Serves the html to the client.
 //******************************************************************************
 pub fn generate_and_serve_directory_html(
     io : std.Io,
@@ -61,9 +131,10 @@ pub fn generate_and_serve_directory_html(
 
 
 //******************************************************************************
-//* Function: 
+//* Function:    serve_file_from_path
 //* 
-//* Description: 
+//* Description: A wrapper for serve_file_2 that allows the file path to be used
+//               as an argument instead of a file object.
 //******************************************************************************
 pub fn serve_file_from_path(
     io : std.Io,
@@ -79,74 +150,14 @@ pub fn serve_file_from_path(
     serve_file_2(io, stream, &file, content_type);
 }
 
+
+
 //******************************************************************************
-//* Function:    
+//* Function:    send_error_state
 //*
-//* Description: 
-//******************************************************************************
-pub fn serve_file_2(
-    io : std.Io,
-    stream : *ComplexStream,
-    file : *std.Io.File,
-    content_type : []const u8
-) void {
-    var backing_buffer_for_response : [1024]u8 = undefined;
-    var body_writer = stream.request.respondStreaming(
-        &backing_buffer_for_response,
-        .{
-            .respond_options = .{
-                .extra_headers = &.{
-                    //.{ .name = "Content-Type", .value = "text/html; charset=utf-8" },
-                    .{ .name = "Content-Type", .value = content_type },
-                },
-            },
-        },
-    ) catch |err| {
-        std.debug.print("Error: \"{any}\" occurred when attempting to respond to the client", .{ err });
-        @panic("TODO: What do you do when you can not respond to request?");
-    };
-    defer body_writer.end() catch {};
-
-    var backing_buffer_for_reader : [1024]u8 = std.mem.zeroes([1024]u8);
-    var file_reader = file.reader(io, &backing_buffer_for_reader);
-
-    //_ = file_reader.interface.streamRemaining(&body_writer.writer) catch {};
-    //std.log.debug("Flushing the body writer...\n", .{});
-    //body_writer.flush() catch |err| {
-    //    std.log.err("There was an error flushing the body writer: {any}\n", .{ err });
-    //};
-    //body_writer.endChunked(.{}) catch |err| {
-    //    std.log.err("There was an issue ending the chunked transfer: {any}\n", .{ err });
-    //};
-
-    if (file_reader.atEnd()) {
-        std.log.err("My Reader indicates that we are at the end of the file\n", .{});
-    }
-    else {
-        std.log.debug("Not at end of file. The position of the reader before starting is: {d}\n", .{ file_reader.pos });
-    }
-    while (true) {
-        file_reader.interface.fillMore() catch |err| {
-            std.log.err("Error reading from file: {any}\n", .{ err });
-            break;
-        };
-        defer file_reader.interface.toss(file_reader.interface.bufferedLen());
-        std.log.debug("We did read at least once successfully\n", .{});
-
-        if (0 == file_reader.interface.buffer.len) break;
-
-        body_writer.writer.writeAll(backing_buffer_for_reader[0..file_reader.interface.bufferedLen()]) catch |err| {
-            std.log.err("Error writing to stream: {any}\n", .{ err });
-            break;
-        };
-    }
-}
-
-
-//******************************************************************************
-//* Function:    
-//*
-//* Description: 
+//* Description: Takes a stream and sends a simple html page to the client with
+//*              the provided stream to communicate an error for the user to 
+//*              synch with the engineers about.
 //******************************************************************************
 pub fn send_error_state(stream : *ComplexStream, status : []const u8) void {
     var backing_buffer_for_response : [1024]u8 = undefined;
