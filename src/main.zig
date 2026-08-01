@@ -51,7 +51,8 @@ pub fn main() !void {
     std.posix.sigaction(.INT, &action, null);
 
     // Reading/establishing config file
-    try config.establish_config(io);
+    try config.establish_config(io, allocator);
+    defer config.freeAllocations(allocator);
     std.log.info("Desired Host from config: {s}", .{ config.get_desired_host() });
 
     //Create a server object - done here to simplify error union

@@ -1,6 +1,7 @@
 const std = @import("std");
 const ComplexStream = @import("complexStream");
 const sysOps = @import("sysOps");
+const config = @import("config");
 
 const SIZE_FOR_BUFFERS = 4096;
 
@@ -277,4 +278,10 @@ fn parse_and_validate_creds(
     ) orelse return error.NoEqualsPassword;
 
     std.debug.print("Username: {s}\nPassword: {s}\n", .{username, password});
+    if (config.check_user_credential(username, password)) {
+        std.debug.print("User is valid.\n", .{});
+    }
+    else {
+        std.debug.print("User is prohibited.\n", .{});
+    }
 }
