@@ -2,6 +2,7 @@ const std = @import("std");
 const ComplexStream = @import("complexStream");
 const sysOps = @import("sysOps");
 const config = @import("config");
+const login = @import("login.zig");
 
 const SIZE_FOR_BUFFERS = 4096;
 
@@ -23,11 +24,7 @@ pub fn generic_poster(
         archive_payload(allocator, io, stream);
     }
     else if (std.mem.eql(u8, stream.header_target, "/login")) {
-        std.debug.print("We are in the login POST!\n", .{});
-        //temporary_print_contents(io, allocator, stream);
-        parse_and_validate_creds(allocator, stream) catch {
-            @panic("TODO");
-        };
+        login.manage_attempt(io, allocator, stream);
     }
     else {
         std.log.debug("Post request is something other than a video archival\n", .{});
