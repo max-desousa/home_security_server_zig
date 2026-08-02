@@ -64,7 +64,7 @@ fn manage_attempt_failable(
         std.debug.print("WARNING: User is NOT authorized\n", .{});
     }
 
-    update_user_cookie(io, username);
+    try update_user_cookie(io, allocator, username);
 }
 
 
@@ -164,8 +164,9 @@ fn extract_creds(
 //******************************************************************************
 fn update_user_cookie(
     io : std.Io, 
+    allocator : std.mem.Allocator,
     username : []const u8,
-) void {
+) !void {
     const now_timestamp = std.Io.Timestamp.now(io, .real);
     const now_nano = now_timestamp.toNanoseconds();
     const seed : u64 = @bitCast(@as(i64, @truncate(now_nano)));
@@ -173,19 +174,18 @@ fn update_user_cookie(
     var random_val : [24]u8 = undefined;
     xoshiro_rng.fill(&random_val);
 
-    std.debug.print("Random cookie: {s}\n", .{ random_val });
     for (&random_val) |*char| {
-        std.debug.print("\told char val: {c}", .{ char.* });
         const interm_char = char.* % 52;
         if (interm_char < 26) {
             char.* = interm_char + 65;
         }
         else {
-            char.* = interm_char + 96;
+            char.* = interm_char + 96 - 26;
         }
-        std.debug.print("\t/\tnew char val: {c}\n", .{ char.* });
     }
-    std.debug.print("Random cookie: {s}\n", .{ random_val });
+
+    const allocated_cookie = try allocator.dupe(u8, &random_val);
 
     _ = &username;
+    _ = &allocated_cookie;
 }
