@@ -172,7 +172,8 @@ pub fn connection_router(
                 continue;
             };
 
-            if (!std.mem.eql(u8, complex_stream.header_target, "/login")) {
+            if ((!std.mem.eql(u8, complex_stream.header_target, "/login")) and 
+                (config.is_valid_cookie(stream.cookie_token.?))) {
                 const validClient : bool = serverOps.general.is_client_recognized_camera(&complex_stream);
                 if (!validClient) {
                     serverOps.general.send_client_to_login(&complex_stream) catch {

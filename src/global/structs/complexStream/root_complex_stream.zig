@@ -103,6 +103,7 @@ fn cache_headers(self : *Self) !void {
         std.debug.print("\tEntry.value: {s}\n", .{ entry.value });
         if (std.mem.eql(u8, entry.name, "Cookie")) {
             std.debug.print("Cookie found from browser!\n", .{});
+            self.cookie_token = entry.value;
         }
     }
 }
