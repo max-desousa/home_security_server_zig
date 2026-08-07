@@ -186,5 +186,9 @@ fn update_user_cookie(
 
     const allocated_cookie = try allocator.dupe(u8, &random_val);
 
-    config.check_user_credential(username, allocated_cookie);
+    _ = config.check_user_credential(username, allocated_cookie);
+}
+
+
+pub fn redirect_to_login() void {
 }

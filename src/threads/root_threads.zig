@@ -155,6 +155,7 @@ pub fn connection_router(
 
             var complex_stream : ComplexStream = ComplexStream.create(
                 stream,
+                allocator,
                 &buffer_for_reading,
                 &buffer_for_writing,
             ) catch |err| {
@@ -167,30 +168,17 @@ pub fn connection_router(
                 continue;
             };
 
-            const method = complex_stream.get_method() catch |err| {
-                std.log.err("Could not find method due to error: {any}\n", .{ err });
-                continue;
-            };
+            defer complex_stream.deinit();
 
-            if ((!std.mem.eql(u8, complex_stream.header_target, "/login")) and 
-                (config.is_valid_cookie(stream.cookie_token.?))) {
-                const validClient : bool = serverOps.general.is_client_recognized_camera(&complex_stream);
-                if (!validClient) {
-                    serverOps.general.send_client_to_login(&complex_stream) catch {
-                        @panic("TODO: how do I want to handle failing to redirect?");
-                    };
-                    continue;
-                    //@panic("TODO: send rejection due to client not being in the client log");
-                }
+            const continue_interaction = serverOps.authenticated_user_check(&complex_stream);
+            
+            if (continue_interaction) {
+                serverOps.stream_processing(io, allocator, &complex_stream);
             }
-
-
-            switch(method) {
-                .GET => serverOps.get.generic_getter(io, allocator, &complex_stream),
-                .POST => serverOps.post.generic_poster(allocator, io, &complex_stream), 
-                else => {
-                    std.log.info("Received an unsupported http request (method: {s}) on thread {d}\n", .{ @tagName(method), thread_num });
-                },
+            else {
+                serverOps.general.send_client_to_login(&complex_stream) catch {
+                    @panic("TODO: how do I want to handle failing to redirect?");
+                };
             }
         }
         else |_| {
@@ -199,3 +187,4 @@ pub fn connection_router(
         }
     }
 }
+
