@@ -29,7 +29,7 @@ pub fn send_client_to_login(stream : *ComplexStream) !void {
     try stream.request.respond(
         "",
         .{
-            .status = .found,
+            .status = .see_other,
             .keep_alive = false,
             .extra_headers = &.{
                 .{ .name = "Location", .value = "/login" },

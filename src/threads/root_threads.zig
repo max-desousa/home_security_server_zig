@@ -155,7 +155,6 @@ pub fn connection_router(
 
             var complex_stream : ComplexStream = ComplexStream.create(
                 stream,
-                allocator,
                 &buffer_for_reading,
                 &buffer_for_writing,
             ) catch |err| {
@@ -167,8 +166,6 @@ pub fn connection_router(
                 std.log.err("Could not setup stream due to error: {any}\n", .{ err });
                 continue;
             };
-
-            defer complex_stream.deinit();
 
             const continue_interaction = serverOps.authenticated_user_check(&complex_stream);
             

@@ -31,9 +31,9 @@ header_method : ?std.http.Method = null,
 
 content_length : ?u64 = null,
 
-//We need a field to parse the header and store the user's cookies (and the allocator that will enable storage)
-allocator : std.mem.Allocator,
+backing_buffer_for_cookie : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = undefined,
 cookie_token : ?[]u8 = null,
+backing_buffer_for_camera_hash : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = undefined,
 camera_hash : ?[]u8 = null,
 
 backing_buffer_for_fs_adjusted_target : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([BUFFER_SIZE_FOR_HEADER_FIELDS]u8),
@@ -45,13 +45,11 @@ fs_adjusted_target : []u8 = undefined,
 
 pub fn create(
     stream : std.Io.net.Stream,
-    allocator : std.mem.Allocator,
     buffer_for_reading : []u8,
     buffer_for_writing : []u8,
 ) !Self {
     return .{
         .stream = stream,
-        .allocator = allocator,
         .backing_buffer_for_raw_stream_writer = buffer_for_writing,
         .backing_buffer_for_raw_stream_reader = buffer_for_reading,
     };
@@ -67,17 +65,6 @@ pub fn setup(
     self.header_target = &self.backing_buffer_for_target;
 
     try self.cache_headers();
-}
-
-pub fn deinit(
-    self : *Self,
-) void {
-    if (self.cookie_token) |slice| {
-        self.allocator.free(slice);
-    }
-    if (self.camera_hash) |slice| {
-        self.allocator.free(slice);
-    }
 }
 
 
@@ -120,12 +107,14 @@ fn cache_headers(self : *Self) !void {
     var headerIterator = self.request.iterateHeaders();
     while (headerIterator.next()) |entry| {
         if (std.mem.eql(u8, entry.name, "Cookie")) {
-            const allocated_cookie_token = try self.allocator.dupe(u8, entry.value);
-            self.cookie_token = allocated_cookie_token;
+            const len = entry.value.len;
+            @memcpy(self.backing_buffer_for_cookie[0..len], entry.value);
+            self.cookie_token = self.backing_buffer_for_cookie[0..len];
         }
         if (std.mem.eql(u8, entry.name , "Camera-Hash")) {
-            const allocated_camera_hash = try self.allocator.dupe(u8, entry.value);
-            self.camera_hash = allocated_camera_hash;
+            const len = entry.value.len;
+            @memcpy(self.backing_buffer_for_camera_hash[0..len], entry.value);
+            self.camera_hash = self.backing_buffer_for_camera_hash[0..len];
         }
     }
 }

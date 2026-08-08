@@ -8,8 +8,12 @@ pub fn authenticated_user_check(
         return true;
     }
     else if (stream.cookie_token) |token| {
+        //Checking if token is a valid cookie
         _ = &token;
-        return false;
+        return true;
+    }
+    else if (std.mem.eql(u8, stream.header_target, "/login")) {
+        return true;
     }
     else {
         return false;
