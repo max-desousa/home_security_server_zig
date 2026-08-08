@@ -20,19 +20,20 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
+    const mod_config = b.createModule(.{
+        .root_source_file = b.path("src/config/root_config.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const mod_system_ops = b.createModule(.{
         .root_source_file = b.path("src/systemOps/root_systemOps.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
             .{ .name = "complexStream", .module = mod_complex_stream },
+            .{ .name = "config", .module = mod_config },
         },
-    });
-
-    const mod_config = b.createModule(.{
-        .root_source_file = b.path("src/config/root_config.zig"),
-        .target = target,
-        .optimize = optimize,
     });
 
     const mod_server_ops = b.createModule(.{

@@ -60,7 +60,7 @@ pub fn check_user_credential(username : []const u8, password : []const u8) bool 
 
 
 pub fn update_user_cookie(username : []const u8, cookie : []const u8) !void {
-    for (VALUE_USER_CREDENTIALS.items) |cred| {
+    for (VALUE_USER_CREDENTIALS.items) |*cred| {
         if (std.mem.eql(u8, cred.username, username)) {
             cred.cookie = cookie;
             return;

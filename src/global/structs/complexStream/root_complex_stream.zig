@@ -31,8 +31,10 @@ header_method : ?std.http.Method = null,
 
 content_length : ?u64 = null,
 
-//We need a field to parse the header and store the user's cookies.
+backing_buffer_for_cookie : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = undefined,
 cookie_token : ?[]u8 = null,
+backing_buffer_for_camera_hash : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = undefined,
+camera_hash : ?[]u8 = null,
 
 backing_buffer_for_fs_adjusted_target : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([BUFFER_SIZE_FOR_HEADER_FIELDS]u8),
 fs_adjusted_target : []u8 = undefined,
@@ -73,10 +75,17 @@ pub fn setup(
 //******************************************************************************
 fn cache_headers(self : *Self) !void {
     self.request = try self.server.receiveHead();
+
+    // Caching content length
     if (self.request.head.content_length) |len| {
         self.content_length = len;
     }
+
+    //Cacing method of the connection
     self.header_method = self.request.head.method;
+
+    //Caching a target string that matches the file system
+    //    -> a login of '/' correlates to '.' in the filesystem
     if (1 == self.request.head.target.len) {
         self.fs_adjusted_target = std.fmt.bufPrint(
             &self.backing_buffer_for_fs_adjusted_target,
@@ -93,17 +102,19 @@ fn cache_headers(self : *Self) !void {
     }
     @memcpy(self.backing_buffer_for_target[0..self.request.head.target.len], self.request.head.target);
     self.header_target = self.backing_buffer_for_target[0..self.request.head.target.len];
-    std.log.debug("Header target is: {s}\n", .{ self.header_target });
 
-    //Here we will evaluate cookies if there are any:
+    //Here we itterate and allocate any additional headers
     var headerIterator = self.request.iterateHeaders();
     while (headerIterator.next()) |entry| {
-        std.debug.print("--- New header found ---\n", .{});
-        std.debug.print("\tEntry.name: {s}\n", .{ entry.name });
-        std.debug.print("\tEntry.value: {s}\n", .{ entry.value });
         if (std.mem.eql(u8, entry.name, "Cookie")) {
-            std.debug.print("Cookie found from browser!\n", .{});
-            self.cookie_token = entry.value;
+            const len = entry.value.len;
+            @memcpy(self.backing_buffer_for_cookie[0..len], entry.value);
+            self.cookie_token = self.backing_buffer_for_cookie[0..len];
+        }
+        if (std.mem.eql(u8, entry.name , "Camera-Hash")) {
+            const len = entry.value.len;
+            @memcpy(self.backing_buffer_for_camera_hash[0..len], entry.value);
+            self.camera_hash = self.backing_buffer_for_camera_hash[0..len];
         }
     }
 }

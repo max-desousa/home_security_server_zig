@@ -64,7 +64,14 @@ fn manage_attempt_failable(
         std.debug.print("WARNING: User is NOT authorized\n", .{});
     }
 
-    try update_user_cookie(io, allocator, username);
+    std.log.debug("Starting login function `update_user_cookie`", .{});
+    const cookie = try update_user_cookie(io, allocator, username);
+
+    std.log.debug("Ending `update_user_cookie`, starting `send_redirect_to_home`", .{});
+
+    try send_redirect_to_home(stream, cookie);
+
+    std.log.debug("Ending `send_redirect_to_home`", .{});
 }
 
 
@@ -159,14 +166,14 @@ fn extract_creds(
 //* Function:    update_user_cookie
 //*
 //* Description: Updating the user database with a new valid cookie that should
-//               be sent to the user to allow subsequent visits without 
-//               revalidation
+//*              be sent to the user to allow subsequent visits without 
+//*              revalidation
 //******************************************************************************
 fn update_user_cookie(
     io : std.Io, 
     allocator : std.mem.Allocator,
     username : []const u8,
-) !void {
+) ![]const u8 {
     const now_timestamp = std.Io.Timestamp.now(io, .real);
     const now_nano = now_timestamp.toNanoseconds();
     const seed : u64 = @bitCast(@as(i64, @truncate(now_nano)));
@@ -186,5 +193,46 @@ fn update_user_cookie(
 
     const allocated_cookie = try allocator.dupe(u8, &random_val);
 
-    config.check_user_credential(username, allocated_cookie);
+    try config.update_user_cookie(username, allocated_cookie);
+
+    return allocated_cookie;
+}
+
+
+pub fn redirect_to_login() void {
+}
+
+
+//******************************************************************************
+//* Function:    
+//*
+//* Description: 
+//******************************************************************************
+fn send_redirect_to_home(
+    stream : *ComplexStream,
+    cookie_string : []const u8,
+) !void {
+    var backing_buffer_for_cookie_value : [512]u8 = undefined;
+    const cookie_value = try std.fmt.bufPrint(
+        &backing_buffer_for_cookie_value,
+        "session={s}; Path=/; HttpOnly; SameSite=Strict, Max-Age=300",
+        .{
+            cookie_string,
+        },
+    );
+
+    std.log.debug("Attempting to respond with redirect to home", .{});
+    try stream.request.respond(
+        "",
+        .{
+            .status = .see_other,
+            .keep_alive = false,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "/" },
+                .{ .name = "Content-Type", .value = "text/html; charset=utf-8" },
+                .{ .name = "Set-Cookie",   .value = cookie_value },
+            },
+        }
+    );
+    std.log.debug("Sent redirect to home", .{});
 }
