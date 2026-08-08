@@ -167,7 +167,7 @@ pub fn connection_router(
                 continue;
             };
 
-            const continue_interaction = serverOps.authenticated_user_check(&complex_stream);
+            const continue_interaction = serverOps.authenticated_user_check(io, &complex_stream);
             
             if (continue_interaction) {
                 serverOps.stream_processing(io, allocator, &complex_stream);

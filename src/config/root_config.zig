@@ -19,6 +19,7 @@ const UserCredential = struct {
     username : []const u8,
     password : []const u8,
     cookie : ?[]const u8 = null,
+    expiry_time : i64 = 0,
 };
 
 //##############################################################################
