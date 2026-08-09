@@ -170,9 +170,11 @@ pub fn connection_router(
             const continue_interaction = serverOps.authenticated_user_check(io, &complex_stream);
             
             if (continue_interaction) {
+                std.log.debug("Should continue connection - valid client", .{});
                 serverOps.stream_processing(io, allocator, &complex_stream);
             }
             else {
+                std.log.debug("Should not continue request - invalid client (send to login)", .{});
                 serverOps.general.send_client_to_login(&complex_stream) catch {
                     @panic("TODO: how do I want to handle failing to redirect?");
                 };
