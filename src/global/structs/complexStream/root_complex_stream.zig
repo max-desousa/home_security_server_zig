@@ -107,8 +107,20 @@ fn cache_headers(self : *Self) !void {
     var headerIterator = self.request.iterateHeaders();
     while (headerIterator.next()) |entry| {
         if (std.mem.eql(u8, entry.name, "Cookie")) {
-            const len = entry.value.len;
-            @memcpy(self.backing_buffer_for_cookie[0..len], entry.value);
+            std.log.debug("The cookie token in the stream is: {s}", .{ entry.value });
+
+            var working_slice_for_cookie = entry.value;
+
+            if (std.mem.containsAtLeast(u8, entry.value, 1, "session=")) {
+                _, working_slice_for_cookie = std.mem.cut(u8, entry.value, "session=") orelse return error.InvalidCookieNoSessionString;
+            }
+
+            if (std.mem.containsAtLeast(u8, entry.value, 1, ";")) {
+                working_slice_for_cookie, _ = std.mem.cut(u8, working_slice_for_cookie, ";") orelse return error.InvalidCookieSemiColon;
+            }
+
+            const len = working_slice_for_cookie.len;
+            @memcpy(self.backing_buffer_for_cookie[0..len], working_slice_for_cookie);
             self.cookie_token = self.backing_buffer_for_cookie[0..len];
         }
         if (std.mem.eql(u8, entry.name , "Camera-Hash")) {

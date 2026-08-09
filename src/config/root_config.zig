@@ -18,7 +18,10 @@ const FIELD_USER_CREDENTIAL = "[ Authorized login ]";
 const UserCredential = struct {
     username : []const u8,
     password : []const u8,
+    configured_timeout : i64, //The amount of time that user's cookie is
+                              //allowed to be valid for
     cookie : ?[]const u8 = null,
+    expiry_time : i64 = 0, //The realtime the cookie expires
 };
 
 //##############################################################################
@@ -59,10 +62,13 @@ pub fn check_user_credential(username : []const u8, password : []const u8) bool 
 }
 
 
-pub fn update_user_cookie(username : []const u8, cookie : []const u8) !void {
+pub fn update_user_cookie(io : std.Io, username : []const u8, cookie : []const u8) !void {
+    const timestamp_now = std.Io.Timestamp.now(io, .real);
+    const now_seconds = timestamp_now.toSeconds();
     for (VALUE_USER_CREDENTIALS.items) |*cred| {
         if (std.mem.eql(u8, cred.username, username)) {
             cred.cookie = cookie;
+            cred.expiry_time = cred.configured_timeout + now_seconds;
             return;
         }
     }
@@ -71,11 +77,29 @@ pub fn update_user_cookie(username : []const u8, cookie : []const u8) !void {
 
 
 pub fn is_valid_cookie(cookie : []const u8) bool {
+
+    for (VALUE_USER_CREDENTIALS.items, 0..) |cred, i| {
+        std.log.debug("User[{d}]:", .{i});
+        std.log.debug("\tusername: {s}", .{cred.username});
+        std.log.debug("\tpassword: {s}", .{cred.password});
+        if (cred.cookie) |ckie| {
+            std.log.debug("\tcookie: {s}", .{ckie});
+        }
+        else {
+            std.log.debug("\tNo cookie present", .{});
+        }
+        std.log.debug("\tconfigured timeout: {d}", .{cred.configured_timeout});
+        std.log.debug("\texpiry time: {d}", .{cred.expiry_time});
+    }
+
     for (VALUE_USER_CREDENTIALS.items) |cred| {
-        if (std.mem.eql(u8, cred.cookie, cookie)) {
+        const credential_cookie = cred.cookie orelse continue;
+        std.log.debug("Comparing {s} and {s}", .{credential_cookie, cookie});
+        if (std.mem.eql(u8, credential_cookie, cookie)) {
             return true;
         }
     }
+    std.log.err("During check for valid cookie - server is saying no matches for cookie {s}", .{cookie});
     return false;
 }
 
@@ -113,7 +137,15 @@ fn parse_file(
             VALUE_DESIRED_PORT = try std.fmt.parseInt(u16, after, 10);
         }
         else if (std.mem.eql(u8, before, FIELD_USER_CREDENTIAL)) {
-            const username, const password = std.mem.cut(u8, after, "/") orelse return error.InvalidCredential;
+            var iterator = std.mem.splitScalar(u8, after, '/');
+            const username = iterator.next() orelse @panic("Invalid config for credential - couldn't find username");
+            const password = iterator.next() orelse @panic("Invalid config for credential - couldn't find password");
+            const timeout_string = iterator.next() orelse @panic("Invalid config for credential - couldn't find timeout");
+            const timeout = std.fmt.parseInt(i64, timeout_string, 10) catch |err| {
+                std.log.err("Couldn't convert user credential timeout from text to a number during config. Error reported is: \"{any}\"", .{ err });
+                return err;
+            };
+
             const allocated_username = try allocator.dupe(u8, username);
             const allocated_password = try allocator.dupe(u8, password);
             try VALUE_USER_CREDENTIALS.append(
@@ -121,6 +153,7 @@ fn parse_file(
                 .{
                     .username = allocated_username,
                     .password = allocated_password,
+                    .configured_timeout = timeout,
                 }
             );
         }
@@ -170,4 +203,17 @@ fn make_default_config(io : std.Io) !void {
     try writer.print("{s} = {d}\n", .{FIELD_DESIRED_PORT, VALUE_DESIRED_PORT});
     
     try file_writer.end();
+}
+
+
+pub fn cookie_expiry_time(
+    cookie : []const u8,
+) ?i64 {
+    for (VALUE_USER_CREDENTIALS.items) |cred| {
+        const credential_cookie = cred.cookie orelse continue;
+        if (std.mem.eql(u8, credential_cookie, cookie)) {
+            return cred.expiry_time;
+        }
+    }
+    return null;
 }

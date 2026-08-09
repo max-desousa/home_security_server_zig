@@ -193,7 +193,7 @@ fn update_user_cookie(
 
     const allocated_cookie = try allocator.dupe(u8, &random_val);
 
-    try config.update_user_cookie(username, allocated_cookie);
+    try config.update_user_cookie(io, username, allocated_cookie);
 
     return allocated_cookie;
 }
