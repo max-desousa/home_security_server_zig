@@ -2,6 +2,7 @@ const std = @import("std");
 const config = @import("config");
 const options = @import("options");
 const threads = @import("threads");
+const auth = @import("auth");
 
 
 //Global const's
@@ -52,7 +53,7 @@ pub fn main() !void {
 
     // Reading/establishing config file
     try config.establish_config(io, allocator);
-    defer config.freeAllocations(allocator);
+    defer auth.freeAllocations(allocator);
     std.log.info("Desired Host from config: {s}", .{ config.get_desired_host() });
 
     //Create a server object - done here to simplify error union

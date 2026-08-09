@@ -1,4 +1,5 @@
 const std = @import("std");
+const auth = @import("auth");
 
 // Const keeping track of config file name to prevent mismatching references 
 // leading to runtime errors
@@ -15,24 +16,11 @@ const FIELD_USER_CREDENTIAL = "[ Authorized login ]";
 
 //##############################################################################
 
-const UserCredential = struct {
-    username : []const u8,
-    password : []const u8,
-    configured_timeout : i64, //The amount of time that user's cookie is
-                              //allowed to be valid for
-    cookie : ?[]const u8 = null,
-    expiry_time : i64 = 0, //The realtime the cookie expires
-};
-
-//##############################################################################
-
 // Backing values of the fields in the config file
 var BUFFER_FOR_VALUE_DESIRED_HOST : [256]u8 = undefined;
 var VALUE_DESIRED_HOST: []const u8 = BUFFER_FOR_VALUE_DESIRED_HOST[0..0];
 
 var VALUE_DESIRED_PORT : u16 = undefined;
-
-var VALUE_USER_CREDENTIALS : std.ArrayList(UserCredential) = .empty;
 
 //##############################################################################
 
@@ -46,63 +34,6 @@ pub fn get_desired_host() []const u8 {
 pub fn get_desired_port() u16 {
     return VALUE_DESIRED_PORT;
 }
-
-pub fn check_user_credential(username : []const u8, password : []const u8) bool {
-    for (VALUE_USER_CREDENTIALS.items) |valid_credential| {
-        if (std.mem.eql(u8, valid_credential.username, username)) {
-            if (std.mem.eql(u8, valid_credential.password, password)) {
-                return true;
-            }
-            else {
-                return false;
-            }
-        }
-    }
-    return false;
-}
-
-
-pub fn update_user_cookie(io : std.Io, username : []const u8, cookie : []const u8) !void {
-    const timestamp_now = std.Io.Timestamp.now(io, .real);
-    const now_seconds = timestamp_now.toSeconds();
-    for (VALUE_USER_CREDENTIALS.items) |*cred| {
-        if (std.mem.eql(u8, cred.username, username)) {
-            cred.cookie = cookie;
-            cred.expiry_time = cred.configured_timeout + now_seconds;
-            return;
-        }
-    }
-    return error.UserNotFound;
-}
-
-
-pub fn is_valid_cookie(cookie : []const u8) bool {
-
-    for (VALUE_USER_CREDENTIALS.items, 0..) |cred, i| {
-        std.log.debug("User[{d}]:", .{i});
-        std.log.debug("\tusername: {s}", .{cred.username});
-        std.log.debug("\tpassword: {s}", .{cred.password});
-        if (cred.cookie) |ckie| {
-            std.log.debug("\tcookie: {s}", .{ckie});
-        }
-        else {
-            std.log.debug("\tNo cookie present", .{});
-        }
-        std.log.debug("\tconfigured timeout: {d}", .{cred.configured_timeout});
-        std.log.debug("\texpiry time: {d}", .{cred.expiry_time});
-    }
-
-    for (VALUE_USER_CREDENTIALS.items) |cred| {
-        const credential_cookie = cred.cookie orelse continue;
-        std.log.debug("Comparing {s} and {s}", .{credential_cookie, cookie});
-        if (std.mem.eql(u8, credential_cookie, cookie)) {
-            return true;
-        }
-    }
-    std.log.err("During check for valid cookie - server is saying no matches for cookie {s}", .{cookie});
-    return false;
-}
-
 
 //##############################################################################
 
@@ -148,7 +79,7 @@ fn parse_file(
 
             const allocated_username = try allocator.dupe(u8, username);
             const allocated_password = try allocator.dupe(u8, password);
-            try VALUE_USER_CREDENTIALS.append(
+            try auth.VALUE_USER_CREDENTIALS.append(
                 allocator, 
                 .{
                     .username = allocated_username,
@@ -165,16 +96,6 @@ fn parse_file(
     }
 }
 
-pub fn freeAllocations(allocator : std.mem.Allocator) void {
-    for (VALUE_USER_CREDENTIALS.items) |entry| {
-        allocator.free(entry.username);
-        allocator.free(entry.password);
-        if (entry.cookie) |cookie| {
-            allocator.free(cookie);
-        }
-    }
-    VALUE_USER_CREDENTIALS.deinit(allocator);
-}
 
 fn make_default_config(io : std.Io) !void {
     const new_file = try std.Io.Dir.createFile(
@@ -206,14 +127,3 @@ fn make_default_config(io : std.Io) !void {
 }
 
 
-pub fn cookie_expiry_time(
-    cookie : []const u8,
-) ?i64 {
-    for (VALUE_USER_CREDENTIALS.items) |cred| {
-        const credential_cookie = cred.cookie orelse continue;
-        if (std.mem.eql(u8, credential_cookie, cookie)) {
-            return cred.expiry_time;
-        }
-    }
-    return null;
-}

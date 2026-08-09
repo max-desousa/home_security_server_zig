@@ -1,6 +1,6 @@
 const std = @import("std");
-const config = @import("config");
 const ComplexStream = @import("complexStream");
+const auth = @import("auth");
 
 pub fn authenticated_user_check(
     io : std.Io,
@@ -14,13 +14,13 @@ pub fn authenticated_user_check(
     }
     else if (stream.cookie_token) |token| {
         std.log.debug("Evaluating cookie: {s}", .{ token });
-        if (!config.is_valid_cookie(token)) return false;
+        if (!auth.is_valid_cookie(token)) return false;
 
         std.log.debug("Cookie ({s}) was found in arraylist as a valid token", .{ token});
 
         //if for some reason the expiry time is not present (it should be)
         //eject early
-        const expiry_time_for_cookie = config.cookie_expiry_time(token) orelse return false;
+        const expiry_time_for_cookie = auth.cookie_expiry_time(token) orelse return false;
 
         //Getting current time to check against our saved cookie data
         const timestamp_now = std.Io.Timestamp.now(io, .real);

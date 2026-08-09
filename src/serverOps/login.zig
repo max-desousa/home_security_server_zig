@@ -7,7 +7,7 @@
 
 const std = @import("std");
 const ComplexStream = @import("complexStream");
-const config = @import("config");
+const auth = @import("auth");
 
 
 //******************************************************************************
@@ -56,7 +56,7 @@ fn manage_attempt_failable(
     std.debug.print("\tUsername: {s}\n", .{ username });
     std.debug.print("\tPassword: {s}\n", .{ password });
 
-    const valid_user = config.check_user_credential(username, password);
+    const valid_user = auth.check_user_credential(username, password);
     if (valid_user) {
         std.debug.print("USER IS VALID!\n", .{});
     }
@@ -193,7 +193,7 @@ fn update_user_cookie(
 
     const allocated_cookie = try allocator.dupe(u8, &random_val);
 
-    try config.update_user_cookie(io, username, allocated_cookie);
+    try auth.update_user_cookie(io, username, allocated_cookie);
 
     return allocated_cookie;
 }
