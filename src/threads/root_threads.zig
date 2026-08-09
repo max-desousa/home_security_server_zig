@@ -167,17 +167,15 @@ pub fn connection_router(
                 continue;
             };
 
-            const method = complex_stream.get_method() catch |err| {
-                std.log.err("Could not find method due to error: {any}\n", .{ err });
-                continue;
-            };
-
-            switch(method) {
-                .GET => serverOps.get.generic_getter(io, allocator, &complex_stream),
-                .POST => serverOps.post.generic_poster(allocator, io, &complex_stream), 
-                else => {
-                    std.log.info("Received an unsupported http request (method: {s}) on thread {d}\n", .{ @tagName(method), thread_num });
-                },
+            const continue_interaction = serverOps.authenticated_user_check(&complex_stream);
+            
+            if (continue_interaction) {
+                serverOps.stream_processing(io, allocator, &complex_stream);
+            }
+            else {
+                serverOps.general.send_client_to_login(&complex_stream) catch {
+                    @panic("TODO: how do I want to handle failing to redirect?");
+                };
             }
         }
         else |_| {
@@ -186,3 +184,4 @@ pub fn connection_router(
         }
     }
 }
+

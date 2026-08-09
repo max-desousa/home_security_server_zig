@@ -15,6 +15,7 @@ const RequestType = enum {
     Playlist_PlayerSetup,
     Playlist_StreamCalculated,
     Playlist_StreamSingleFile,
+    Static,
 };
 
 
@@ -29,6 +30,20 @@ fn classify_request_type(
 ) ?RequestType {
     //Is the request a home page?
     if (std.mem.eql(u8, stream.header_target, "/")) return .Home;
+
+    //Checking if the request is a static html file:
+    var path_buffer : [1024]u8 = undefined;
+    const path_string = std.fmt.bufPrint(&path_buffer, "static{s}.html", .{ stream.header_target }) catch { 
+        @panic("TODO: how do I want to handle buffer failures while looking for static html?");
+    };
+    const is_static : bool = blk: {
+        std.debug.print("The path_string being evaluated is: \"{s}\"\n", .{ path_string });
+        _ = std.Io.Dir.statFile(.cwd(), io, path_string, .{ .follow_symlinks = false }) catch {
+            break :blk false;
+        };
+        break :blk true;
+    };
+    if (is_static) return .Static;
 
     // Checking if the request is a directory
     if (sysOps.request_is_directory(io, stream)) return .Directory;
@@ -110,94 +125,16 @@ pub fn generic_getter(
             );
         },
         .Playlist_StreamSingleFile => generate_and_serve_playlist(io, allocator, stream),
-
-        //.File_NotVideo => {
-        //    html.serve_file_from_path(
-        //        io, 
-        //        stream, 
-        //        stream.fs_adjusted_target,
-        //        "text/html; charset=utf-8",
-        //    );
-        //},
-        //.File_Video_Downloading => {
-        //    html.serve_file_from_path(
-        //        io, 
-        //        stream, 
-        //        stream.fs_adjusted_target,
-        //        "video/mp2t",
-        //    );
-        //},
-        //.File_Video_Streaming => html.send_video_streaming(io, stream),
-        //.Playlist => html.send_playlist(io, stream),
+        .Static => {
+            serve_static_file(
+                io,
+                stream,
+            ) catch |err| {
+                std.debug.print("Static file serving failed due to error: {any}\n", .{ err });
+            };
+        },
         else => unreachable,
     }
-
-//    if (sysOps.request_is_directory(io, stream)) {
-//        if (!std.mem.startsWith(u8, stream.header_target, "/Archives")) {
-//            std.log.debug("We're trying to serve the static home file due to bad path\n", .{});
-//            html.serve_file_from_path(
-//                io,
-//                stream,
-//                "/static/HelloWorld.html",
-//                "text/html; charset=utf-8",
-//            );
-//        }
-//        else {
-//            std.log.debug("Generic folder serving\n", .{});
-//            html.generate_and_serve_directory_html(io, stream);
-//        }
-//    }
-//    else {
-//        if (request_is_for_favicon(stream)) {
-//            std.log.debug("Handling a favicon request\n", .{});
-//            stream.request.respond(
-//                "",
-//                .{
-//                    .status = .no_content,
-//                }
-//            ) catch {
-//                @panic("TODO: What do I do when server fails to reject favicon");
-//            };
-//        }
-//        else {
-//            if (is_playlist_request(stream)) {
-//                if (null != std.mem.indexOf(u8, stream.header_target, "&player=true")) {
-//                    html.serve_file_from_path(
-//                        io,
-//                        stream,
-//                        "/static/player.html",
-//                        "text/html; charset=utf-8",
-//                    );
-//                }
-//                else {
-//                    var file = sysOps.generate_and_get_playlist_file(
-//                        io, 
-//                        allocator, 
-//                        stream.header_target
-//                    ) catch |err| {
-//                        std.log.err("Encountered error creating playlist file: {any}\n", .{ err });
-//                        return;
-//                    };
-//                    defer file.close(io);
-//
-//                    html.serve_file_2(io, stream, &file, "application/vnd.apple.mpegurl");
-//                }
-//            }
-//            else if (is_video_file_request(stream)) {
-//                std.log.info("Got video request: {s}\n", .{ stream.header_target });
-//                html.serve_file_from_path(
-//                    io,
-//                    stream,
-//                    stream.header_target,
-//                     //"application/vnd.apple.mpegurl",
-//                     "video/mp2t",
-//                );
-//            }
-//            else {
-//                std.log.err("Unexpected request type through target: {s}\n", .{ stream.header_target });
-//            }
-//        }
-//    }
 }
 
 
@@ -345,4 +282,59 @@ fn failable_generate_and_serve_playlist(
 
     // Send the playlist to the client
     html.serve_file_2(io, stream, &playlist_file, "application/vnd.apple.mpegurl");
+}
+
+
+//******************************************************************************
+//* Function: serve_static_file
+//*
+//* Description: We have some functions designed to serve files to the client.
+//               However, those functions often require a hardcoded path to the 
+//               file that they are trying to serve. The point of this function
+//               is to take the requested path from the clients request and serve
+//               the static file based on that. Making this function effectively
+//               more reusable form. 
+//
+//               (Contextual Note During implementation)
+//               During its implementation, this function's inputs were
+//               previously confirmed to have a corresponding static loction. 
+//               But, to make the function truly reusable, that check will be 
+//               redone to account for future scenarios where such a distinct 
+//               check may not have been done beforehand. (This is just a note
+//               to any onlookers wondering why the only use case is duplicating
+//               the check that the static file exists. As the project matures, 
+//               this should be something that is optimized/removed.)
+//******************************************************************************
+fn serve_static_file(
+    io : std.Io,
+    stream : *ComplexStream,
+    //"text/html; charset=utf-8", //Removing for the time being, is there a
+                                  //content type for a static page that would
+                                  //be anything other than this?
+) !void {
+    var path_buffer : [1024]u8 = undefined;
+    const path_string = std.fmt.bufPrint(&path_buffer, "/static{s}.html", .{ stream.header_target }) catch |err| { 
+        std.debug.print("TODO: What do I want to do with an error in the buffer here\n", .{});
+        std.debug.print("\tThe error for this instance was: {any}\n", .{ err });
+        return err;
+    };
+
+    const is_static : bool = blk: {
+        std.debug.print("The path_string being evaluated is: \"{s}\"\n", .{ path_string });
+        _ = std.Io.Dir.statFile(.cwd(), io, path_string[1..], .{ .follow_symlinks = false }) catch {
+            break :blk false;
+        };
+        break :blk true;
+    };
+
+    if (!is_static) {
+        return error.RequestIsNotStaticFile;
+    }
+
+    html.serve_file_from_path(
+        io,
+        stream,
+        path_string,
+        "text/html; charset=utf-8"
+    );
 }
