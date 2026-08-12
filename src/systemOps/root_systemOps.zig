@@ -1,28 +1,13 @@
+//! This is the root file for the `systemOps` module.
+//!
+//! The contents of this module are primarily for functions related to the
+//! interaction with files in the server. If a file's contents need to be read,
+//! file names need to be analyzed, etc. That is the functionality this module
+//! is intending to help with.
+
 const std = @import("std");
 const ComplexStream = @import("complexStream");
 const html_preamble = @embedFile("serve_dir_preamble.txt");
-
-pub fn open_static_html(io : std.Io, path : []const u8) !?std.Io.File {
-    var path_buffer : [512]u8 = std.mem.zeroes([512]u8);
-    const sub_path = try std.fmt.bufPrint(&path_buffer, "static/{s}.html", .{path});
-    const file = std.Io.Dir.openFile(
-        std.Io.Dir.cwd(),
-        io,
-        sub_path,
-        .{}
-    ) catch |err| {
-        // At the moment, I like the idea of returning null - instead of an
-        // error - when the file is simply not present. (Trying to open a file
-        // that doesn't exist? Successfully return a failed option... seems
-        // like it makes good use of the option)
-        if (std.Io.File.OpenError.FileNotFound == err) {
-            return null;
-        }
-        else return err;
-    };
-    return file;
-}
-
 
 //******************************************************************************
 //* Function:    
@@ -377,9 +362,17 @@ fn file_sorting_less_than(_ : void,  a : []const u8, b: []const u8) bool {
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    generate_list_of_files_in_dir_path
 //*
-//* Description: 
+//* Description: Given a directory object from the standard library, this
+//               function handles scanning the directory for contents that are
+//               directories and files. This function is provided array lists
+//               to modify.
+//
+//               The primary use case of this function is to aid in the
+//               creation of an html representation of the contents of a
+//               directory. (The two seperate array lists are a simple way of
+//               "sorting" directories from files for the view)
 //******************************************************************************
 fn generate_list_of_files_in_dir_path(
     io : std.Io,
@@ -416,9 +409,15 @@ fn generate_list_of_files_in_dir_path(
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    get_maximum_duration_of_video_from_list
 //*
-//* Description: 
+//* Description: In the event that a playlist is requested by the user in order
+//*              to view a combined stream of files, the EXTM3U playlist needs
+//*              to know the chunk size. The chunk size should be equal to the
+//*              longest file in the playlist (more that no files should be
+//*              longer than the chunk size). This function goes through the
+//*              relevant individual videos and parses a max duration to use
+//*              when making the playlist file.
 //******************************************************************************
 fn get_maximum_duration_of_video_from_list(
     file_list : *std.ArrayList([]const u8),
