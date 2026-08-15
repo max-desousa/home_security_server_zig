@@ -81,10 +81,10 @@ fn manage_attempt_failable(
         std.debug.print("WARNING: User is NOT authorized\n", .{});
     }
 
-    std.log.debug("Starting login function `update_user_cookie`", .{});
-    const cookie = try update_user_cookie(io, allocator, username);
+    std.log.debug("Starting login function `generate_user_cookie`", .{});
+    const cookie = try generate_user_cookie(io, allocator, username);
 
-    std.log.debug("Ending `update_user_cookie`, starting `send_redirect_to_home`", .{});
+    std.log.debug("Ending `generate_user_cookie`, starting `send_redirect_to_home`", .{});
 
     try send_redirect_to_home(stream, cookie);
 
@@ -193,13 +193,13 @@ fn extract_creds(
 
 
 //******************************************************************************
-//* Function:    update_user_cookie
+//* Function:    generate_user_cookie
 //*
 //* Description: Updating the user database with a new valid cookie that should
 //*              be sent to the user to allow subsequent visits without 
 //*              revalidation
 //******************************************************************************
-fn update_user_cookie(
+fn generate_user_cookie(
     io : std.Io, 
     allocator : std.mem.Allocator,
     username : []const u8,
@@ -223,7 +223,7 @@ fn update_user_cookie(
 
     const allocated_cookie = try allocator.dupe(u8, &random_val);
 
-    try auth.update_user_cookie(io, username, allocated_cookie);
+    try auth.update_user_cookie(io, allocator, username, allocated_cookie);
 
     return allocated_cookie;
 }
@@ -260,7 +260,7 @@ pub fn send_client_to_login(stream : *ComplexStream) !void {
 //               short Max-Age.
 //
 //               The cookie string itself is generated earlier by
-//               update_user_cookie; this function only formats the header
+//               generate_user_cookie; this function only formats the header
 //               and sends the redirect.
 //******************************************************************************
 fn send_redirect_to_home(

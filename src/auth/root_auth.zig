@@ -99,10 +99,18 @@ pub fn check_user_credential(username : []const u8, password : []const u8) bool 
 //               cookie string in the master list. But, this function also
 //               captures the current time and updates that entry's expiry_time
 //******************************************************************************
-pub fn update_user_cookie(io : std.Io, username : []const u8, cookie : []const u8) !void {
+pub fn update_user_cookie(
+    io : std.Io,
+    allocator : std.mem.Allocator,
+    username : []const u8,
+    cookie : []const u8
+) !void {
     const timestamp_now = std.Io.Timestamp.now(io, .real);
     const now_seconds = timestamp_now.toSeconds();
     for (VALUE_USER_CREDENTIALS.items) |*cred| {
+        if (cred.cookie) |cookie_to_free| {
+            allocator.free(cookie_to_free);
+        }
         if (std.mem.eql(u8, cred.username, username)) {
             cred.cookie = cookie;
             cred.expiry_time = cred.configured_timeout + now_seconds;
