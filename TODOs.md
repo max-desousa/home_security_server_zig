@@ -9,6 +9,8 @@
 
 I need some method of handling certificates or something that will allow for camera's to authenticate themselves differently from a user. I have an ongoing grok thread trying to learn about the implementaitons of CA certificates. This is the most promising solution at this point.
 
+An unused per-IP camera connection log (`ConnectionLog` / `is_client_recognized_camera` in serverOps) was removed rather than left as a stub. Do not resurrect that log as empty functions — camera identity should land here as a real design (certificates), not as an IP cache.
+
 ## Add nullable status to ComplexStream
 
 Right now in the connectionThread, there is a `defer` statement to make sure the stream is getting closed. I like this as a security method and as a ultimate point where the stream is closed. 

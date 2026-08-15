@@ -1,6 +1,14 @@
+//! Early request gate: may this request proceed to GET/POST work?
+//!
+//! `/login` and camera-hash requests are allowed through. Cookie-bearing
+//! requests are checked against the `auth` store and the server-side expiry
+//! window. This is not the credential store (`auth`) and not the login POST
+//! (`login.zig`).
+
 const std = @import("std");
 const ComplexStream = @import("complexStream");
 const auth = @import("auth");
+const login = @import("login.zig");
 
 //******************************************************************************
 //* Function:    authenticated_user_check
@@ -21,7 +29,7 @@ pub fn authenticated_user_check(
     io : std.Io,
     stream : *ComplexStream,
 ) bool {
-    if (std.mem.eql(u8, stream.header_target, "/login")) {
+    if (login.is_login_request(stream)) {
         return true;
     }
     else if (stream.camera_hash) |_| {
@@ -40,7 +48,7 @@ pub fn authenticated_user_check(
         //Getting current time to check against our saved cookie data
         const timestamp_now = std.Io.Timestamp.now(io, .real);
         const now_seconds = timestamp_now.toSeconds();
-        
+
         //Is the current time greater than the expiry time for the cookie?
         if (now_seconds >= expiry_time_for_cookie) {
             return false;

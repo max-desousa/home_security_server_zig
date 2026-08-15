@@ -206,7 +206,7 @@ pub fn connection_router(
             }
             else {
                 std.log.debug("Should not continue request - invalid client (send to login)", .{});
-                serverOps.general.send_client_to_login(&complex_stream) catch {
+                serverOps.send_client_to_login(&complex_stream) catch {
                     @panic("TODO: how do I want to handle failing to redirect?");
                 };
             }

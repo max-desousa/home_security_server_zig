@@ -1,13 +1,26 @@
-//! This is a file with server functions specifically for handling matters related to login process. 
+//! Login POST and the two session redirects.
 //!
-//! Things that will for sure be here:
-//!   - Parsing data from stream to assess credentials
-//!   - Sending different responses based on the validity of the credentials
+//! This file parses credentials from POST /login, asks `auth` to store a
+//! cookie, and redirects home with Set-Cookie. It also sends an
+//! unauthenticated client to /login. Cookie/password storage lives in
+//! `auth`. The early "may this request proceed?" check is `request_gate.zig`.
 
 
 const std = @import("std");
 const ComplexStream = @import("complexStream");
 const auth = @import("auth");
+
+
+//******************************************************************************
+//* Function:    is_login_request
+//*
+//* Description: True when the target is /login. Used by the request gate
+//               (so the login page can load without a session) and by POST
+//               routing (so the body is parsed here).
+//******************************************************************************
+pub fn is_login_request(stream : *const ComplexStream) bool {
+    return std.mem.eql(u8, stream.header_target, "/login");
+}
 
 
 //******************************************************************************
@@ -217,17 +230,24 @@ fn update_user_cookie(
 
 
 //******************************************************************************
-//* Function:    redirect_to_login
+//* Function:    send_client_to_login
 //*
-//* Description: This is intended as a public helper for sending a client to
-//               the login page. It is currently an unimplemented stub.
-//
-//               The live redirect used by connection_router is
-//               general.send_client_to_login. This name is left in place so
-//               a login-module version can be filled in without chasing
-//               call sites later.
+//* Description: This function sends a 303 redirect to /login with no body.
+//               connection_router uses this when authenticated_user_check
+//               fails, so the client is pointed at login instead of being
+//               left hanging on the resource they asked for.
 //******************************************************************************
-pub fn redirect_to_login() void {
+pub fn send_client_to_login(stream : *ComplexStream) !void {
+    try stream.request.respond(
+        "",
+        .{
+            .status = .see_other,
+            .keep_alive = false,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "/login" },
+            },
+        }
+    );
 }
 
 
