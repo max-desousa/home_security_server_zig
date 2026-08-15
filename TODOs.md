@@ -3,6 +3,9 @@
 - Add nullable status to ComplexStream
 - Make connections more secure for human clients
 
+Mesh / dual-homed bind work is recorded in `NETWORKING.md` (what landed
+in the repo vs OS bring-up that is still outstanding).
+
 # Task Details
 
 ## Establish better identity management

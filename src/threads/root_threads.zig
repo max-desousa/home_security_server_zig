@@ -58,18 +58,67 @@ pub const Server = struct {
     //              address; listen prints that address and starts a TCP
     //              stream listener on it so accept can start handing
     //              connections off to the router threads.
+    //
+    //              If config.zap names a listen interface, the socket is then
+    //              locked to that NIC (SO_BINDTODEVICE). Leave that field
+    //              empty for the dual-homed case: one 0.0.0.0 socket serves
+    //              both the house LAN and bat0.
     //##########################################################################
     pub fn listen(self: Server) !std.Io.net.Server {
         std.debug.print("Server Addr: {s}:{any}\n", .{self.host, self.port});
-        return try self.addr.listen(
+        var server = try self.addr.listen(
             self.io, 
             .{
                 .mode = .stream,
                 .protocol = .tcp,
             }
         );
+        errdefer server.deinit(self.io);
+
+        if (config.get_listen_interface()) |iface| {
+            try restrict_listen_to_interface(self.io, server.socket.handle, iface);
+            std.log.info("Listen restricted to interface {s}", .{ iface });
+        }
+
+        return server;
     }
 };
+
+
+//******************************************************************************
+//* Function:    restrict_listen_to_interface
+//*
+//* Description: Confirms the named NIC exists, then applies SO_BINDTODEVICE
+//*              so the already-listening socket only accepts on that NIC.
+//*              Missing names fail startup instead of silently serving the
+//*              wrong network.
+//******************************************************************************
+fn restrict_listen_to_interface(
+    io : std.Io,
+    fd : std.posix.fd_t,
+    iface : []const u8,
+) !void {
+    const name = std.Io.net.Interface.Name.fromSlice(iface) catch {
+        std.log.err("Listen interface name is invalid or too long: {s}", .{ iface });
+        return error.InvalidInterfaceName;
+    };
+    _ = name.resolve(io) catch |err| {
+        std.log.err("Listen interface \"{s}\" is not present: {any}", .{ iface, err });
+        return err;
+    };
+
+    var name_buf: [std.posix.IFNAMESIZE]u8 = std.mem.zeroes([std.posix.IFNAMESIZE]u8);
+    @memcpy(name_buf[0..iface.len], iface);
+    std.posix.setsockopt(
+        fd,
+        std.posix.SOL.SOCKET,
+        std.posix.SO.BINDTODEVICE,
+        name_buf[0 .. iface.len + 1],
+    ) catch |err| {
+        std.log.err("SO_BINDTODEVICE on \"{s}\" failed: {any}", .{ iface, err });
+        return err;
+    };
+}
 
 
 //##############################################################################
@@ -124,6 +173,7 @@ pub fn accept(
     };
     var server = server_struct.listen() catch |err| {
         std.log.err("-- Server could not be initialized --\n\tThis is related to starting the listner...\n\rError msg: \"{any}\"\n", .{ err });
+        induce_thread_cancellation();
         return;
     };
     defer server.deinit(io);

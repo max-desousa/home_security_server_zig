@@ -63,6 +63,13 @@ pub fn main() !void {
     try config.establish_config(io, allocator);
     defer auth.freeAllocations(allocator);
     std.log.info("Desired Host from config: {s}", .{ config.get_desired_host() });
+    if (config.get_listen_interface()) |iface| {
+        std.log.info("Listen interface from config: {s}", .{ iface });
+    }
+    else {
+        std.log.info("Listen interface from config: (all interfaces)", .{});
+    }
+    std.log.warn("Camera-Hash is accepted without verification. Unsafe on a shared mesh. See NETWORKING.md.", .{});
 
     //Create a server object - done here to simplify error union
 

@@ -42,6 +42,7 @@ const CONFIG_FILE_NAME = "config.zap";
 
 const FIELD_DESIRED_HOST = "[ requested host address ]";
 const FIELD_DESIRED_PORT = "[ requested port ]";
+const FIELD_LISTEN_INTERFACE = "[ listen interface ]";
 const FIELD_USER_CREDENTIAL = "[ Authorized login ]";
 
 
@@ -53,6 +54,12 @@ var BUFFER_FOR_VALUE_DESIRED_HOST : [256]u8 = undefined;
 var VALUE_DESIRED_HOST: []const u8 = BUFFER_FOR_VALUE_DESIRED_HOST[0..0];
 
 var VALUE_DESIRED_PORT : u16 = undefined;
+
+// Optional SO_BINDTODEVICE name. Null / empty means accept on every interface
+// the process can see (the dual-homed default: house LAN + bat0).
+const LISTEN_INTERFACE_NAME_MAX = 16;
+var BUFFER_FOR_LISTEN_INTERFACE : [LISTEN_INTERFACE_NAME_MAX]u8 = undefined;
+var VALUE_LISTEN_INTERFACE: ?[]const u8 = null;
 
 
 //##############################################################################
@@ -86,6 +93,18 @@ pub fn get_desired_host() []const u8 {
 //******************************************************************************
 pub fn get_desired_port() u16 {
     return VALUE_DESIRED_PORT;
+}
+
+
+//******************************************************************************
+//* Function:    get_listen_interface
+//*
+//* Description: Optional NIC name from config.zap. Null means the listen
+//*              socket is not restricted with SO_BINDTODEVICE. Only valid
+//*              after establish_config has run.
+//******************************************************************************
+pub fn get_listen_interface() ?[]const u8 {
+    return VALUE_LISTEN_INTERFACE;
 }
 
 
@@ -124,9 +143,12 @@ pub fn establish_config(io : std.Io, allocator : std.mem.Allocator) !void {
 //*
 //* Description: This function walks config.zap line by line and fills the
 //               module's backing values. Lines are expected as
-//               "field = value". Host is copied into a static buffer, port is
-//               parsed as a u16, and each authorized-login line is split into
-//               username/password/timeout then appended onto
+//               "field = value". Blank lines and '#' comments are skipped
+//               so the file can document the dual-homed / batman-adv bind.
+//               Host is copied into a static buffer, port is parsed as a
+//               u16, an optional listen-interface name is stored (empty
+//               means all interfaces), and each authorized-login line is
+//               split into username/password/timeout then appended onto
 //               auth.VALUE_USER_CREDENTIALS.
 //
 //               Credential strings have to be allocated here because we do not
@@ -141,17 +163,36 @@ fn parse_file(
     var reader_buffer : [512]u8 = undefined;
     var file_reader = std.Io.File.reader(file, io, &reader_buffer);
     while (file_reader.interface.takeDelimiter('\n')) |nullable_line| {
-        const line = nullable_line orelse break;
-        const before, const after = std.mem.cut(u8, line, " = ") orelse return error.BadInputFile;
+        const raw = nullable_line orelse break;
+        const line = std.mem.trim(u8, raw, " \t\r");
+        if (line.len == 0) continue;
+        if (line[0] == '#') continue;
+
+        const eq = std.mem.indexOfScalar(u8, line, '=') orelse return error.BadInputFile;
+        const before = std.mem.trim(u8, line[0..eq], " \t");
+        const value = std.mem.trim(u8, line[eq + 1 ..], " \t");
+
         if (std.mem.eql(u8, before, FIELD_DESIRED_HOST)) {
-            @memmove(BUFFER_FOR_VALUE_DESIRED_HOST[0..after.len], after);
-            VALUE_DESIRED_HOST = BUFFER_FOR_VALUE_DESIRED_HOST[0..after.len];
+            @memmove(BUFFER_FOR_VALUE_DESIRED_HOST[0..value.len], value);
+            VALUE_DESIRED_HOST = BUFFER_FOR_VALUE_DESIRED_HOST[0..value.len];
         }
         else if (std.mem.eql(u8, before, FIELD_DESIRED_PORT)) {
-            VALUE_DESIRED_PORT = try std.fmt.parseInt(u16, after, 10);
+            VALUE_DESIRED_PORT = try std.fmt.parseInt(u16, value, 10);
+        }
+        else if (std.mem.eql(u8, before, FIELD_LISTEN_INTERFACE)) {
+            if (value.len == 0) {
+                VALUE_LISTEN_INTERFACE = null;
+            }
+            else {
+                if (value.len >= BUFFER_FOR_LISTEN_INTERFACE.len) {
+                    return error.ListenInterfaceNameTooLong;
+                }
+                @memmove(BUFFER_FOR_LISTEN_INTERFACE[0..value.len], value);
+                VALUE_LISTEN_INTERFACE = BUFFER_FOR_LISTEN_INTERFACE[0..value.len];
+            }
         }
         else if (std.mem.eql(u8, before, FIELD_USER_CREDENTIAL)) {
-            var iterator = std.mem.splitScalar(u8, after, '/');
+            var iterator = std.mem.splitScalar(u8, value, '/');
             const username = iterator.next() orelse @panic("Invalid config for credential - couldn't find username");
             const password = iterator.next() orelse @panic("Invalid config for credential - couldn't find password");
             const timeout_string = iterator.next() orelse @panic("Invalid config for credential - couldn't find timeout");
@@ -172,7 +213,8 @@ fn parse_file(
             );
         }
         else {
-            unreachable;
+            std.log.err("Unknown config field: {s}", .{ before });
+            return error.UnknownConfigField;
         }
     } else |err| {
         std.debug.print("Error reading file: {any}\n", .{err});
@@ -209,6 +251,10 @@ fn make_default_config(io : std.Io) !void {
 
     var writer = &file_writer.interface;
 
+    try writer.print("# First-run default is loopback so a missing config.zap is not reachable\n", .{});
+    try writer.print("# from the house LAN or the camera mesh. Change the host to 0.0.0.0 and\n", .{});
+    try writer.print("# see NETWORKING.md when this box is dual-homed (eth0 + bat0).\n", .{});
+
     const localhost = "127.0.0.1";
     @memmove(BUFFER_FOR_VALUE_DESIRED_HOST[0..localhost.len], localhost);
     VALUE_DESIRED_HOST = BUFFER_FOR_VALUE_DESIRED_HOST[0..localhost.len];
@@ -216,6 +262,9 @@ fn make_default_config(io : std.Io) !void {
 
     VALUE_DESIRED_PORT = 3490;
     try writer.print("{s} = {d}\n", .{FIELD_DESIRED_PORT, VALUE_DESIRED_PORT});
+
+    VALUE_LISTEN_INTERFACE = null;
+    try writer.print("{s} = \n", .{FIELD_LISTEN_INTERFACE});
     
     try file_writer.end();
 }
