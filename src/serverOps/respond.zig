@@ -1,69 +1,40 @@
+//! Primitive HTTP responses: stream a file, send 204, or send an error page.
+//!
+//! Feature orchestration (directory listing, playlist generation) does not
+//! live here — those files call into this one to send the result.
+
 const std = @import("std");
 const ComplexStream = @import("complexStream");
-const sysOps = @import("sysOps");
-
-const HTML_FILE_TO_SERVE = ".html_to_serve.html";
-
-pub fn serve_file(
-    io : std.Io,
-    stream : *ComplexStream,
-    sub_path : []const u8,
-) !void {
-    const file = try std.Io.Dir.openFile(.cwd(), io, sub_path, .{.allow_directory = false});
-    defer file.close(io);
-
-    var buffer_file_reader : [512]u8 = undefined;
-    var file_reader = std.Io.File.reader(file, io, &buffer_file_reader);
-
-    var buffer_body_writer : [512]u8 = undefined;
-    var body_writer = try stream.request.respondStreaming(&buffer_body_writer, .{});
-    defer body_writer.end() catch {};
-
-    _ = try file_reader.interface.streamRemaining(&body_writer.writer);
-}
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    send_no_content
 //*
-//* Description: 
+//* Description: Empty 204 so the client is not left spinning on a target
+//               GET routing did not recognize.
 //******************************************************************************
-pub fn generate_and_serve_directory_html(
-    io : std.Io,
-    allocator : std.mem.Allocator,
-    stream : *ComplexStream
-) void {
-    //Try creating file to generate html into if failure - respond negative response
-    var file = std.Io.Dir.createFile(
-        .cwd(),
-        io,
-        HTML_FILE_TO_SERVE,
+pub fn send_no_content(stream : *ComplexStream) void {
+    stream.request.respond(
+        "",
         .{
-            .read = true,
-            .lock = .exclusive,
+            .status = .no_content,
         }
     ) catch {
-        send_error_state(stream, "Backing file could not be secured");
-        return;
+        @panic("TODO: What do I do when server fails to reject favicon");
     };
-    defer std.Io.Dir.deleteFile(.cwd(), io, HTML_FILE_TO_SERVE) catch |err| {
-        std.log.err("Could not delete the temporary file used for html view of directory due to error: {any}", .{ err });
-    };
-    defer file.close(io);
-
-    sysOps.generate_html_for_folder(io, allocator, &file, stream.fs_adjusted_target) catch |err| {
-        std.log.err("Failed dir html generation due to error {any}\n", .{ err });
-        send_error_state(stream, "Error generating your view of the directory");
-    };
-
-    serve_file_2(io, stream, &file, "text/html; charset=utf-8");
 }
 
 
 //******************************************************************************
-//* Function: 
-//* 
-//* Description: 
+//* Function:    serve_file_from_path
+//*
+//* Description: This function opens a path (skipping the leading '/' so it
+//               is cwd-relative) and forwards the file to serve_file with
+//               the caller-supplied Content-Type. Open failure is reported
+//               to the client as an error page rather than bubbling out.
+//
+//               This is the convenient entry for GET routing when the
+//               target is already known (home, player.html, video files).
 //******************************************************************************
 pub fn serve_file_from_path(
     io : std.Io,
@@ -76,15 +47,22 @@ pub fn serve_file_from_path(
         return;
     };
     defer file.close(io);
-    serve_file_2(io, stream, &file, content_type);
+    serve_file(io, stream, &file, content_type);
 }
 
 //******************************************************************************
-//* Function:    
+//* Function:    serve_file
 //*
-//* Description: 
+//* Description: This is the shared send path. It builds a streaming
+//               response with the given Content-Type and copies the file in
+//               fill/toss chunks. Directory listings, playlists, and
+//               static/video GETs all eventually hit this function.
+//
+//               The chunked copy is intentional - some of these files can
+//               be large video clips, and we do not want to require the
+//               whole file in memory before the first byte goes out.
 //******************************************************************************
-pub fn serve_file_2(
+pub fn serve_file(
     io : std.Io,
     stream : *ComplexStream,
     file : *std.Io.File,
@@ -144,9 +122,16 @@ pub fn serve_file_2(
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    send_error_state
 //*
-//* Description: 
+//* Description: This is the last-resort HTML error page so the browser is
+//               not left spinning when something in serving or generation
+//               fails. The status string is interpolated into a small
+//               "Server has entered error state" document.
+//
+//               Wrappers that catch errors (playlist generation, directory
+//               HTML, file open) call this instead of returning a bare
+//               status with no body.
 //******************************************************************************
 pub fn send_error_state(stream : *ComplexStream, status : []const u8) void {
     var backing_buffer_for_response : [1024]u8 = undefined;
@@ -160,7 +145,7 @@ pub fn send_error_state(stream : *ComplexStream, status : []const u8) void {
     };
     defer body_writer.end() catch {};
 
-    const starting_text = 
+    const starting_text =
         \\<!DOCTYPE html>
         \\<html lang="en">
         \\<head>
@@ -196,7 +181,7 @@ pub fn send_error_state(stream : *ComplexStream, status : []const u8) void {
     body_writer.writer.print("    <h1>Server has entered error state: \"{s}\"</h1>\n", .{ status }) catch {
         @panic("Could not write status...");
     };
-    const ending_text = 
+    const ending_text =
         \\    <p>Please try again and let the engineer know about the issue/conditions.</p>
         \\</body>
         \\</html>

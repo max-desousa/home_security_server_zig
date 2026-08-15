@@ -1,54 +1,43 @@
+//! Camera upload write path for POST /archival/.
+//!
+//! This file owns the `/archival/` URL prefix and the write path that
+//! follows it. `post.zig` asks `is_archival_request`, then calls
+//! `archive_payload`.
+
 const std = @import("std");
 const ComplexStream = @import("complexStream");
-const sysOps = @import("sysOps");
-const config = @import("config");
-const login = @import("login.zig");
 
 const SIZE_FOR_BUFFERS = 4096;
 
 
 //##############################################################################
-// Function: 
+// Function:    is_archival_request
 //
-// Description: 
+// Description: This function returns true when the request target starts
+//              with /archival/. That prefix is how cameras (or the
+//              uploader) mark a clip that should be written under
+//              Archives/ rather than treated as a login or an unknown
+//              POST.
 //##############################################################################
-pub fn generic_poster(
-    allocator : std.mem.Allocator,
-    io : std.Io,
-    stream : *ComplexStream
-) void {
-    std.debug.print("I'm in a poster right now...\n", .{});
-    std.log.debug("My header_target at start of poster is: {s}\n", .{stream.header_target});
-    if (determine_if_video_upload(stream)) {
-        std.log.debug("Post request IS video archival\n", .{});
-        archive_payload(allocator, io, stream);
-    }
-    else if (std.mem.eql(u8, stream.header_target, "/login")) {
-        login.manage_attempt(io, allocator, stream);
-    }
-    else {
-        std.log.debug("Post request is something other than a video archival\n", .{});
-        std.log.debug("\tHeader target is {s}\n", .{ stream.header_target });
-    }
-}
-
-
-//##############################################################################
-// Function: 
-//
-// Description: 
-//##############################################################################
-fn determine_if_video_upload(stream : *const ComplexStream) bool {
+pub fn is_archival_request(stream : *const ComplexStream) bool {
     return std.mem.startsWith(u8, stream.header_target, "/archival/");
 }
 
 
 //##############################################################################
-// Function: 
+// Function:    archive_payload
 //
-// Description: 
+// Description: This is the full archival path for a camera upload. It
+//              derives an Archives/... path from the target, rejects with
+//              409 if that file already exists (so a client cannot
+//              clobber a clip it already sent), creates parent dirs,
+//              streams the POST body into the new file, then ACKs.
+//
+//              Several failure points are still @panic TODOs - this is
+//              the path that most needs a real error response once those
+//              are decided.
 //##############################################################################
-fn archive_payload(
+pub fn archive_payload(
     allocator : std.mem.Allocator,
     io : std.Io,
     stream : *ComplexStream
@@ -68,7 +57,7 @@ fn archive_payload(
     if (file_exists) {
         stream.request.respond(
             "",
-            .{ 
+            .{
                 .keep_alive = false,
                 .status = .conflict,
             }
@@ -117,9 +106,16 @@ fn archive_payload(
 
 
 //##############################################################################
-// Function: 
+// Function:    get_desired_path_for_archival
 //
-// Description: 
+// Description: This function strips /archival/ from the request target and
+//              prefixes Archives/ so the on-disk path matches the URL the
+//              camera posted to. The resulting path is allocated for the
+//              caller to free.
+//
+//              If the target does not contain that prefix (it should, if
+//              is_archival_request already ran), this returns an
+//              error instead of inventing a path.
 //##############################################################################
 fn get_desired_path_for_archival(
     allocator : std.mem.Allocator,
@@ -139,9 +135,13 @@ fn get_desired_path_for_archival(
 
 
 //##############################################################################
-// Function: 
+// Function:    check_if_file_already_exists
 //
-// Description: 
+// Description: This is a statFile helper used before archival writes.
+//              FileNotFound means we are clear to create the clip. Any
+//              other stat result - including unexpected errors - is
+//              treated as "exists" so we do not clobber something we
+//              could not inspect.
 //##############################################################################
 fn check_if_file_already_exists(io : std.Io, path : []const u8) bool {
     const failable_stat = std.Io.Dir.statFile(.cwd(), io, path, .{ .follow_symlinks = false});
@@ -159,9 +159,13 @@ fn check_if_file_already_exists(io : std.Io, path : []const u8) bool {
 
 
 //##############################################################################
-// Function: 
+// Function:    ensure_directory_exists
 //
-// Description: 
+// Description: This function takes the full archive file path, drops the
+//              last segment (the filename), and createDirPathStatus so
+//              nested camera/date folders exist before the file is
+//              created. A path with no slash is treated as an error
+//              because that would mean we have nowhere to put the clip.
 //##############################################################################
 fn ensure_directory_exists(io : std.Io, archive_path : []const u8) !std.Io.Dir.CreatePathStatus {
     const nullable_cut = std.mem.cutLast(u8, archive_path, "/");
@@ -174,111 +178,4 @@ fn ensure_directory_exists(io : std.Io, archive_path : []const u8) !std.Io.Dir.C
     };
 
     return try std.Io.Dir.createDirPathStatus(.cwd(), io, directory, .default_dir);
-}
-
-
-//******************************************************************************
-//******************************************************************************
-fn temporary_print_contents(
-    io : std.Io,
-    allocator : std.mem.Allocator,
-    stream : *ComplexStream,
-) void {
-    _ = &allocator;
-    _ = &io;
-    //var reader_backing_buffer : [512]u8 = undefined;
-    //var reader = stream.stream.reader(io, &reader_backing_buffer);
-
-    var bytes_remaining : u64 = blk: {
-        if (stream.content_length) |len| { break :blk len; }
-        else { return; }
-    };
-
-    std.debug.print("Buffered Content:\n", .{});
-    while(bytes_remaining > 0) {
-        const bytes_to_read = @min(bytes_remaining, 512);
-        defer {
-            if (bytes_to_read > bytes_remaining) {
-                bytes_remaining = 0;
-            }
-            else {
-                bytes_remaining = bytes_remaining - bytes_to_read;
-            }
-        }
-        stream.raw_stream_reader.interface.fill(bytes_to_read) catch return;
-        defer stream.raw_stream_reader.interface.tossBuffered();
-        std.debug.print("{s}", .{ stream.raw_stream_reader.interface.buffered() });
-
-    }
-}
-
-//******************************************************************************
-//* Function: parse_and_validate_creds
-//*
-//* Description: 
-//******************************************************************************
-fn parse_and_validate_creds(
-    allocator : std.mem.Allocator,
-    stream : *ComplexStream,
-) !void {
-    var response : std.ArrayList([]const u8) = .empty;
-
-    var bytes_remaining : u64 = blk: {
-        if (stream.content_length) |len| { break :blk len; }
-        else { return; }
-    };
-
-    std.debug.print("Buffered Content:\n", .{});
-    while(bytes_remaining > 0) {
-        const bytes_to_read = @min(bytes_remaining, 512);
-        defer {
-            if (bytes_to_read > bytes_remaining) {
-                bytes_remaining = 0;
-            }
-            else {
-                bytes_remaining = bytes_remaining - bytes_to_read;
-            }
-        }
-        stream.raw_stream_reader.interface.fill(bytes_to_read) catch return;
-        //defer stream.raw_stream_reader.interface.tossBuffered();
-
-        const foo = stream.raw_stream_reader.interface.buffered();
-        var lines = std.mem.splitScalar(u8, foo, '\n');
-        while (lines.next()) |line| {
-            const duped_line = try allocator.dupe(u8, line);
-            try response.append(allocator, duped_line);
-            stream.raw_stream_reader.interface.toss(line.len);
-        }
-    }
-
-    defer {
-        for (response.items) |line| {
-            allocator.free(line);
-        }
-        response.deinit(allocator);
-    }
-
-    const username_full, const password_full = std.mem.cut(
-        u8,
-        response.items[0],
-        "&",
-    ) orelse return error.NoAmpersand;
-    _, const username = std.mem.cut(
-        u8,
-        username_full,
-        "=",
-    ) orelse return error.NoEqualsUsername;
-    _, const password = std.mem.cut(
-        u8,
-        password_full,
-        "=",
-    ) orelse return error.NoEqualsPassword;
-
-    std.debug.print("Username: {s}\nPassword: {s}\n", .{username, password});
-    if (config.check_user_credential(username, password)) {
-        std.debug.print("User is valid.\n", .{});
-    }
-    else {
-        std.debug.print("User is prohibited.\n", .{});
-    }
 }

@@ -1,13 +1,26 @@
-//! This is a file with server functions specifically for handling matters related to login process. 
+//! Login POST and the two session redirects.
 //!
-//! Things that will for sure be here:
-//!   - Parsing data from stream to assess credentials
-//!   - Sending different responses based on the validity of the credentials
+//! This file parses credentials from POST /login, asks `auth` to store a
+//! cookie, and redirects home with Set-Cookie. It also sends an
+//! unauthenticated client to /login. Cookie/password storage lives in
+//! `auth`. The early "may this request proceed?" check is `request_gate.zig`.
 
 
 const std = @import("std");
 const ComplexStream = @import("complexStream");
-const config = @import("config");
+const auth = @import("auth");
+
+
+//******************************************************************************
+//* Function:    is_login_request
+//*
+//* Description: True when the target is /login. Used by the request gate
+//               (so the login page can load without a session) and by POST
+//               routing (so the body is parsed here).
+//******************************************************************************
+pub fn is_login_request(stream : *const ComplexStream) bool {
+    return std.mem.eql(u8, stream.header_target, "/login");
+}
 
 
 //******************************************************************************
@@ -35,12 +48,16 @@ pub fn manage_attempt(
 
 
 //******************************************************************************
-//* Function:    manage_attempt
+//* Function:    manage_attempt_failable
 //*
-//* Description: This is a function for managing all necessary steps to parse
-//               and proceed with a login attempt.
-//               It mostly serves as a one-shot that can be called by the
-//               generic post logic. 
+//* Description: This is the inner implementation of manage_attempt. It parses
+//               credentials from the POST body, checks them against auth,
+//               issues a new cookie, then redirects the client home.
+//
+//               It is split out from the wrapper so this path can use `try`
+//               without forcing generic_poster to handle an error union.
+//               Failures bubble to manage_attempt, which currently panics
+//               with a TODO.
 //******************************************************************************
 fn manage_attempt_failable(
     io : std.Io,
@@ -56,7 +73,7 @@ fn manage_attempt_failable(
     std.debug.print("\tUsername: {s}\n", .{ username });
     std.debug.print("\tPassword: {s}\n", .{ password });
 
-    const valid_user = config.check_user_credential(username, password);
+    const valid_user = auth.check_user_credential(username, password);
     if (valid_user) {
         std.debug.print("USER IS VALID!\n", .{});
     }
@@ -75,6 +92,19 @@ fn manage_attempt_failable(
 }
 
 
+//******************************************************************************
+//* Function:    parse_request
+//*
+//* Description: This function reads the login POST body line-by-line onto
+//               the heap so the stream contents can be inspected more than
+//               once. After the body is fully copied, extract_creds pulls
+//               the username/password pair out of that list.
+//
+//               The extra copy is more of an insurance method than anything
+//               else - particularly in case the stream cannot be rewound.
+//               Fails if the stream has no content-length or the body
+//               cannot be filled as expected.
+//******************************************************************************
 fn parse_request(
     allocator : std.mem.Allocator,
     stream : *ComplexStream,
@@ -193,20 +223,45 @@ fn update_user_cookie(
 
     const allocated_cookie = try allocator.dupe(u8, &random_val);
 
-    try config.update_user_cookie(io, username, allocated_cookie);
+    try auth.update_user_cookie(io, username, allocated_cookie);
 
     return allocated_cookie;
 }
 
 
-pub fn redirect_to_login() void {
+//******************************************************************************
+//* Function:    send_client_to_login
+//*
+//* Description: This function sends a 303 redirect to /login with no body.
+//               connection_router uses this when authenticated_user_check
+//               fails, so the client is pointed at login instead of being
+//               left hanging on the resource they asked for.
+//******************************************************************************
+pub fn send_client_to_login(stream : *ComplexStream) !void {
+    try stream.request.respond(
+        "",
+        .{
+            .status = .see_other,
+            .keep_alive = false,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "/login" },
+            },
+        }
+    );
 }
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    send_redirect_to_home
 //*
-//* Description: 
+//* Description: This function is what actually lands a new session cookie on
+//               the client after a successful login. It responds 303 to /
+//               and sets session= with HttpOnly, SameSite=Strict, and a
+//               short Max-Age.
+//
+//               The cookie string itself is generated earlier by
+//               update_user_cookie; this function only formats the header
+//               and sends the redirect.
 //******************************************************************************
 fn send_redirect_to_home(
     stream : *ComplexStream,

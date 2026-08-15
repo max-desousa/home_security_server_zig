@@ -2,6 +2,7 @@ const std = @import("std");
 const config = @import("config");
 const options = @import("options");
 const threads = @import("threads");
+const auth = @import("auth");
 
 
 //Global const's
@@ -12,7 +13,15 @@ const MAX_PARSING_THEADS = MAX_THREAD_COUNT - 2;
 //##############################################################################
 // Function:    main
 //
-// Description: 
+// Description: This is the program entry point. It builds the allocator and
+//              the threaded IO instance, installs the custom SIGINT handler
+//              so threads.Running can shut everything down cleanly, then
+//              loads config.zap.
+//
+//              After config is in place, one accept thread and N
+//              connection-router threads are started against a shared stream
+//              queue. The leftover loop just waits on the running flag until
+//              Ctrl+C (or another cancellation) flips it.
 //##############################################################################
 pub fn main() !void {
     //**************************************************************************
@@ -52,7 +61,7 @@ pub fn main() !void {
 
     // Reading/establishing config file
     try config.establish_config(io, allocator);
-    defer config.freeAllocations(allocator);
+    defer auth.freeAllocations(allocator);
     std.log.info("Desired Host from config: {s}", .{ config.get_desired_host() });
 
     //Create a server object - done here to simplify error union

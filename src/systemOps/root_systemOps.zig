@@ -1,33 +1,25 @@
+//! This is the root file for the `systemOps` module.
+//!
+//! The contents of this module are primarily for functions related to the
+//! interaction with files in the server. If a file's contents need to be read,
+//! file names need to be analyzed, etc. That is the functionality this module
+//! is intending to help with.
+
 const std = @import("std");
 const ComplexStream = @import("complexStream");
 const html_preamble = @embedFile("serve_dir_preamble.txt");
 
-pub fn open_static_html(io : std.Io, path : []const u8) !?std.Io.File {
-    var path_buffer : [512]u8 = std.mem.zeroes([512]u8);
-    const sub_path = try std.fmt.bufPrint(&path_buffer, "static/{s}.html", .{path});
-    const file = std.Io.Dir.openFile(
-        std.Io.Dir.cwd(),
-        io,
-        sub_path,
-        .{}
-    ) catch |err| {
-        // At the moment, I like the idea of returning null - instead of an
-        // error - when the file is simply not present. (Trying to open a file
-        // that doesn't exist? Successfully return a failed option... seems
-        // like it makes good use of the option)
-        if (std.Io.File.OpenError.FileNotFound == err) {
-            return null;
-        }
-        else return err;
-    };
-    return file;
-}
-
-
 //******************************************************************************
-//* Function:    
-//* 
-//* Description: 
+//* Function:    request_is_directory
+//*
+//* Description: This function tries to openDir the stream's
+//               filesystem-adjusted target. FileNotFound and NotDir (and
+//               any other open error) count as "not a directory" so GET
+//               classification can fall through to file/playlist checks.
+//
+//               The conservative false on unexpected errors is intentional
+//               - better to treat a weird path as a non-directory than to
+//               generate a folder view of something we could not open.
 //******************************************************************************
 pub fn request_is_directory(io : std.Io, stream : *ComplexStream) bool {
     const dir = std.Io.Dir.openDir(.cwd(), io, stream.fs_adjusted_target, .{}) catch |err| {
@@ -47,9 +39,17 @@ pub fn request_is_directory(io : std.Io, stream : *ComplexStream) bool {
 
 
 //******************************************************************************
-//* Function:    generate_folder_html
-//* 
-//* Description: 
+//* Function:    generate_html_for_folder
+//*
+//* Description: This function builds the directory-browser HTML that
+//               html.generate_and_serve_directory_html later sends. It
+//               writes the preamble, the start/finalizeDirectory scripts,
+//               then an addRow line for each directory and file (size and
+//               mtime formatted for the existing JS).
+//
+//               Directories and files are collected separately first so
+//               the listing can show folders as a group before files
+//               without a more complicated sort.
 //******************************************************************************
 pub fn generate_html_for_folder(
     io : std.Io,
@@ -128,9 +128,13 @@ pub fn generate_html_for_folder(
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    file_bytes_to_abbreviated_string
 //*
-//* Description: 
+//* Description: This function turns a raw byte count into a short human
+//               size string (4.00 KB, 1.25 MB, etc.) written into the
+//               caller-provided buffer. Used when generating the directory
+//               listing so the JS addRow calls match the size column the
+//               browser view expects.
 //******************************************************************************
 fn file_bytes_to_abbreviated_string(bytes : u64, buffer : []u8) ![]const u8 {
     const units = [_][]const u8{ "B", "KB", "MB", "GB", "TB", "PB" };
@@ -148,9 +152,12 @@ fn file_bytes_to_abbreviated_string(bytes : u64, buffer : []u8) ![]const u8 {
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    timestamp_to_string
 //*
-//* Description: 
+//* Description: This function formats a std.Io.Timestamp as
+//               MM/DD/YYYY, HH:MM:SS for the directory listing's modified
+//               column. The buffer is provided by the caller so the HTML
+//               generation loop can reuse one backing array per file.
 //******************************************************************************
 fn timestamp_to_string(timestamp : std.Io.Timestamp, buffer : []u8) ![]const u8 {
     const epoch_seconds : std.time.epoch.EpochSeconds = .{ .secs = @intCast(@divTrunc(timestamp.nanoseconds, std.time.ns_per_s)) };
@@ -182,9 +189,13 @@ fn timestamp_to_string(timestamp : std.Io.Timestamp, buffer : []u8) ![]const u8 
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    get_single_file_filelist_for_playlist
 //*
-//* Description: 
+//* Description: This function handles the ?m3u8 single-file playlist case.
+//               It pulls the filename off the path and returns an
+//               ArrayList with that one allocated entry so the rest of the
+//               playlist pipeline can stay uniform - populate_playlist_file
+//               always wants a list, even when the "list" is one clip.
 //******************************************************************************
 fn get_single_file_filelist_for_playlist(
     allocator : std.mem.Allocator,
@@ -199,9 +210,13 @@ fn get_single_file_filelist_for_playlist(
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    get_multi_file_filelist_for_playlist
 //*
-//* Description: 
+//* Description: This function parses the start=/end= query off a ranged
+//               playlist URL, then asks get_sorted_array_list_of_files for
+//               every clip in that window. The string chopping is isolated
+//               here so the sorter can work with a directory plus two
+//               timestamp strings and not have to know about URLs.
 //******************************************************************************
 fn get_multi_file_filelist_for_playlist(
     io : std.Io,
@@ -226,9 +241,16 @@ fn get_multi_file_filelist_for_playlist(
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    get_filelist_for_playlist
 //*
-//* Description: 
+//* Description: This is the public entry for building the list of clips
+//               that will go into a playlist. If the target ends in
+//               ?m3u8 it is treated as a single-file request; otherwise it
+//               is treated as a start/end range and the multi-file path
+//               is used.
+//
+//               Keeping this branch here lets the GET playlist handler
+//               stay ignorant of how the two URL forms differ.
 //******************************************************************************
 pub fn get_filelist_for_playlist(
     io : std.Io,
@@ -253,17 +275,25 @@ pub fn get_filelist_for_playlist(
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    populate_playlist_file
 //*
-//* Description: 
-//*
+//* Description: This function writes an HLS VOD playlist into the provided
+//               file. It prints the EXTM3U headers (including a target
+//               duration from get_maximum_duration_of_video_from_list),
+//               then one #EXTINF plus URL per clip, then #EXT-X-ENDLIST.
+//
+//               Per-clip duration is parsed from the start/end seconds
+//               embedded in the archive filename. That is a little extra
+//               work, but it keeps the last clip of a minute from
+//               advertising a full-minute length when it is shorter.
+//
 //* Info: The current form of the string that would be passed to the function is:
 //  "/Archives/NewCamera_2527704881/?m3u8&start=20251207_1022&end=20251213_1022"
 //
 //  It points to:
 //    - Archives (all playlist requests *should* be from archives)
 //    - The camera name we're querying
-//    - The start and end point of the duration we're looking to serve. 
+//    - The start and end point of the duration we're looking to serve.
 //******************************************************************************
 pub fn populate_playlist_file(
     io : std.Io, 
@@ -309,6 +339,19 @@ pub fn populate_playlist_file(
     try playlist_file_writer.flush();
 }
 
+//******************************************************************************
+//* Function:    get_sorted_array_list_of_files
+//*
+//* Description: This function walks a camera archive directory and keeps
+//               names whose truncated timestamp sits between
+//               playlist_start and playlist_end. Hidden/dot files are
+//               skipped. The surviving names are then sorted so the
+//               playlist plays in time order.
+//
+//               This is what actually selects which clips go into a
+//               ranged playlist - the URL parser only supplies the
+//               window, this function applies it to the directory.
+//******************************************************************************
 fn get_sorted_array_list_of_files(
     io : std.Io,
     allocator : std.mem.Allocator,
@@ -367,9 +410,12 @@ fn get_sorted_array_list_of_files(
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    file_sorting_less_than
 //*
-//* Description: 
+//* Description: This is the std.mem.sort predicate used when ordering
+//               archive filenames. It is a straight lexicographic compare.
+//               That works because the archive names embed sortable
+//               timestamps, so string order and time order match.
 //******************************************************************************
 fn file_sorting_less_than(_ : void,  a : []const u8, b: []const u8) bool {
     return std.mem.lessThan(u8, a, b);
@@ -377,9 +423,17 @@ fn file_sorting_less_than(_ : void,  a : []const u8, b: []const u8) bool {
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    generate_list_of_files_in_dir_path
 //*
-//* Description: 
+//* Description: Given a directory object from the standard library, this
+//               function handles scanning the directory for contents that are
+//               directories and files. This function is provided array lists
+//               to modify.
+//
+//               The primary use case of this function is to aid in the
+//               creation of an html representation of the contents of a
+//               directory. (The two seperate array lists are a simple way of
+//               "sorting" directories from files for the view)
 //******************************************************************************
 fn generate_list_of_files_in_dir_path(
     io : std.Io,
@@ -416,9 +470,15 @@ fn generate_list_of_files_in_dir_path(
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    get_maximum_duration_of_video_from_list
 //*
-//* Description: 
+//* Description: In the event that a playlist is requested by the user in order
+//*              to view a combined stream of files, the EXTM3U playlist needs
+//*              to know the chunk size. The chunk size should be equal to the
+//*              longest file in the playlist (more that no files should be
+//*              longer than the chunk size). This function goes through the
+//*              relevant individual videos and parses a max duration to use
+//*              when making the playlist file.
 //******************************************************************************
 fn get_maximum_duration_of_video_from_list(
     file_list : *std.ArrayList([]const u8),

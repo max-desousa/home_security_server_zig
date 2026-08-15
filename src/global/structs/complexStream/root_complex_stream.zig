@@ -43,6 +43,18 @@ fs_adjusted_target : []u8 = undefined,
 //------------------------------ BEGIN METHODS ---------------------------------
 
 
+//******************************************************************************
+//* Function:    create
+//*
+//* Description: This is the constructor for ComplexStream. It stores the raw
+//               std.Io.net.Stream and the caller-owned read/write buffers so
+//               later setup can wire Zig's HTTP server objects without the
+//               caller having to know those internals.
+//
+//               This does not touch the network. setup is the follow-up that
+//               actually attaches readers/writers and caches the request
+//               head.
+//******************************************************************************
 pub fn create(
     stream : std.Io.net.Stream,
     buffer_for_reading : []u8,
@@ -55,6 +67,17 @@ pub fn create(
     };
 }
 
+//******************************************************************************
+//* Function:    setup
+//*
+//* Description: This function wires the raw reader/writer onto the stored
+//               stream, constructs the std.http.Server over those, then
+//               immediately calls cache_headers.
+//
+//               The header-caching step is intentional. Later routing wants
+//               header_target, cookies, camera hash, etc. without trying to
+//               re-read a head that has already been consumed.
+//******************************************************************************
 pub fn setup(
     self : *Self,
     io : std.Io,
@@ -69,9 +92,16 @@ pub fn setup(
 
 
 //******************************************************************************
-// Function: cache_headers
+//* Function:    cache_headers
+//*
+//* Description: This function receives the HTTP head once and copies out
+//               everything this server later needs: content-length, method,
+//               the raw target, a filesystem-adjusted target ("/" becomes
+//               "."), the session= cookie token, and an optional Camera-Hash.
 //
-// Description:
+//               Header state from Zig's server looks transient, so this has
+//               to happen immediately in setup. After this, routing should
+//               be able to work from the cached fields alone.
 //******************************************************************************
 fn cache_headers(self : *Self) !void {
     self.request = try self.server.receiveHead();
@@ -133,9 +163,14 @@ fn cache_headers(self : *Self) !void {
 
 
 //******************************************************************************
-// Function: cache_headers
+//* Function:    get_method
+//*
+//* Description: This function returns the method that was cached during
+//               setup. Only GET and POST are treated as supported so
+//               unsupported verbs never reach the GET/POST routers.
 //
-// Description:
+//               A missing method, or any method other than GET/POST, is
+//               returned as an error for the caller to log and drop.
 //******************************************************************************
 pub fn get_method(
     self : *const Self
