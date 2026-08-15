@@ -14,11 +14,27 @@ pub fn build(b: *std.Build) !void {
     const options = b.addOptions();
     options.addOption(usize, "max_threads", option_max_threads);
 
+    const mod_auth = b.createModule(.{
+        .root_source_file = b.path("src/auth/root_auth.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const mod_config = b.createModule(.{
+        .root_source_file = b.path("src/config/root_config.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "auth", .module = mod_auth },
+        },
+    });
+
     const mod_complex_stream = b.createModule(.{
         .root_source_file = b.path("src/global/structs/complexStream/root_complex_stream.zig"),
         .target = target,
         .optimize = optimize,
     });
+
 
     const mod_system_ops = b.createModule(.{
         .root_source_file = b.path("src/systemOps/root_systemOps.zig"),
@@ -26,6 +42,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "complexStream", .module = mod_complex_stream },
+            .{ .name = "config", .module = mod_config },
         },
     });
 
@@ -36,13 +53,9 @@ pub fn build(b: *std.Build) !void {
         .imports = &.{
             .{ .name = "complexStream", .module = mod_complex_stream },
             .{ .name = "sysOps", .module = mod_system_ops },
+            //.{ .name = "config", .module = mod_config },
+            .{ .name = "auth", .module = mod_auth },
         },
-    });
-
-    const mod_config = b.createModule(.{
-        .root_source_file = b.path("src/config/root_config.zig"),
-        .target = target,
-        .optimize = optimize,
     });
 
     const mod_threads = b.createModule(.{
@@ -66,6 +79,7 @@ pub fn build(b: *std.Build) !void {
                 .{ .name = "config", .module = mod_config },
                 .{ .name = "serverOps", .module = mod_server_ops },
                 .{ .name = "threads", .module = mod_threads },
+                .{ .name = "auth", .module = mod_auth },
             },
         }),
     });

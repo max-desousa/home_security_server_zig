@@ -29,6 +29,13 @@ backing_buffer_for_target : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([
 header_target : []u8 = undefined,
 header_method : ?std.http.Method = null,
 
+content_length : ?u64 = null,
+
+backing_buffer_for_cookie : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = undefined,
+cookie_token : ?[]u8 = null,
+backing_buffer_for_camera_hash : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = undefined,
+camera_hash : ?[]u8 = null,
+
 backing_buffer_for_fs_adjusted_target : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([BUFFER_SIZE_FOR_HEADER_FIELDS]u8),
 fs_adjusted_target : []u8 = undefined,
 
@@ -36,6 +43,18 @@ fs_adjusted_target : []u8 = undefined,
 //------------------------------ BEGIN METHODS ---------------------------------
 
 
+//******************************************************************************
+//* Function:    create
+//*
+//* Description: This is the constructor for ComplexStream. It stores the raw
+//               std.Io.net.Stream and the caller-owned read/write buffers so
+//               later setup can wire Zig's HTTP server objects without the
+//               caller having to know those internals.
+//
+//               This does not touch the network. setup is the follow-up that
+//               actually attaches readers/writers and caches the request
+//               head.
+//******************************************************************************
 pub fn create(
     stream : std.Io.net.Stream,
     buffer_for_reading : []u8,
@@ -48,6 +67,17 @@ pub fn create(
     };
 }
 
+//******************************************************************************
+//* Function:    setup
+//*
+//* Description: This function wires the raw reader/writer onto the stored
+//               stream, constructs the std.http.Server over those, then
+//               immediately calls cache_headers.
+//
+//               The header-caching step is intentional. Later routing wants
+//               header_target, cookies, camera hash, etc. without trying to
+//               re-read a head that has already been consumed.
+//******************************************************************************
 pub fn setup(
     self : *Self,
     io : std.Io,
@@ -62,13 +92,30 @@ pub fn setup(
 
 
 //******************************************************************************
-// Function: cache_headers
+//* Function:    cache_headers
+//*
+//* Description: This function receives the HTTP head once and copies out
+//               everything this server later needs: content-length, method,
+//               the raw target, a filesystem-adjusted target ("/" becomes
+//               "."), the session= cookie token, and an optional Camera-Hash.
 //
-// Description:
+//               Header state from Zig's server looks transient, so this has
+//               to happen immediately in setup. After this, routing should
+//               be able to work from the cached fields alone.
 //******************************************************************************
 fn cache_headers(self : *Self) !void {
     self.request = try self.server.receiveHead();
+
+    // Caching content length
+    if (self.request.head.content_length) |len| {
+        self.content_length = len;
+    }
+
+    //Cacing method of the connection
     self.header_method = self.request.head.method;
+
+    //Caching a target string that matches the file system
+    //    -> a login of '/' correlates to '.' in the filesystem
     if (1 == self.request.head.target.len) {
         self.fs_adjusted_target = std.fmt.bufPrint(
             &self.backing_buffer_for_fs_adjusted_target,
@@ -85,14 +132,45 @@ fn cache_headers(self : *Self) !void {
     }
     @memcpy(self.backing_buffer_for_target[0..self.request.head.target.len], self.request.head.target);
     self.header_target = self.backing_buffer_for_target[0..self.request.head.target.len];
-    std.log.debug("Header target is: {s}\n", .{ self.header_target });
+
+    //Here we itterate and allocate any additional headers
+    var headerIterator = self.request.iterateHeaders();
+    while (headerIterator.next()) |entry| {
+        if (std.mem.eql(u8, entry.name, "Cookie")) {
+            std.log.debug("The cookie token in the stream is: {s}", .{ entry.value });
+
+            var working_slice_for_cookie = entry.value;
+
+            if (std.mem.containsAtLeast(u8, entry.value, 1, "session=")) {
+                _, working_slice_for_cookie = std.mem.cut(u8, entry.value, "session=") orelse return error.InvalidCookieNoSessionString;
+            }
+
+            if (std.mem.containsAtLeast(u8, entry.value, 1, ";")) {
+                working_slice_for_cookie, _ = std.mem.cut(u8, working_slice_for_cookie, ";") orelse return error.InvalidCookieSemiColon;
+            }
+
+            const len = working_slice_for_cookie.len;
+            @memcpy(self.backing_buffer_for_cookie[0..len], working_slice_for_cookie);
+            self.cookie_token = self.backing_buffer_for_cookie[0..len];
+        }
+        if (std.mem.eql(u8, entry.name , "Camera-Hash")) {
+            const len = entry.value.len;
+            @memcpy(self.backing_buffer_for_camera_hash[0..len], entry.value);
+            self.camera_hash = self.backing_buffer_for_camera_hash[0..len];
+        }
+    }
 }
 
 
 //******************************************************************************
-// Function: cache_headers
+//* Function:    get_method
+//*
+//* Description: This function returns the method that was cached during
+//               setup. Only GET and POST are treated as supported so
+//               unsupported verbs never reach the GET/POST routers.
 //
-// Description:
+//               A missing method, or any method other than GET/POST, is
+//               returned as an error for the caller to log and drop.
 //******************************************************************************
 pub fn get_method(
     self : *const Self
