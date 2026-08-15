@@ -13,7 +13,15 @@ const MAX_PARSING_THEADS = MAX_THREAD_COUNT - 2;
 //##############################################################################
 // Function:    main
 //
-// Description: 
+// Description: This is the program entry point. It builds the allocator and
+//              the threaded IO instance, installs the custom SIGINT handler
+//              so threads.Running can shut everything down cleanly, then
+//              loads config.zap.
+//
+//              After config is in place, one accept thread and N
+//              connection-router threads are started against a shared stream
+//              queue. The leftover loop just waits on the running flag until
+//              Ctrl+C (or another cancellation) flips it.
 //##############################################################################
 pub fn main() !void {
     //**************************************************************************

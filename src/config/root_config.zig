@@ -1,20 +1,52 @@
+//! This module is specific to handling the config file (config.zap by default)
+//!
+//! This project has some settings that are configurable. As opposed to pasing
+//! these settings as arguemnts, the config.zap file will contain these values.
+//! This module contains the logic that will assess if the config.zap doesn't
+//! exist, a default will be provided. Then, the original or default file will
+//! be parsed to set values that can be read to govern project behavior. 
+//!
+//! Why not use arguments? 
+//! I'm building this project with a target audience in mind that I want to
+//! help run this with fewer complications. They will need some degree of tech
+//! savy'ness, but if the config file is used, then users can avoid convoluted
+//! startups that are prone to issues. (modifying a settings file is easier
+//! than countless arguments)
+
+
+//##############################################################################
+//################################# Imports ####################################
+//##############################################################################
+
+
 const std = @import("std");
 const auth = @import("auth");
+
+
+//##############################################################################
+//############################# Global Variables ###############################
+//##############################################################################
+
 
 // Const keeping track of config file name to prevent mismatching references 
 // leading to runtime errors
 const CONFIG_FILE_NAME = "config.zap";
 
-//##############################################################################
+
+//------------------------------------------------------------------------------
+
 
 // Fields in config file to be parsed stored as const strings to prevent typos
 // in the varios references in parsing/writing leading to runtime errors
+
 
 const FIELD_DESIRED_HOST = "[ requested host address ]";
 const FIELD_DESIRED_PORT = "[ requested port ]";
 const FIELD_USER_CREDENTIAL = "[ Authorized login ]";
 
-//##############################################################################
+
+//------------------------------------------------------------------------------
+
 
 // Backing values of the fields in the config file
 var BUFFER_FOR_VALUE_DESIRED_HOST : [256]u8 = undefined;
@@ -22,21 +54,57 @@ var VALUE_DESIRED_HOST: []const u8 = BUFFER_FOR_VALUE_DESIRED_HOST[0..0];
 
 var VALUE_DESIRED_PORT : u16 = undefined;
 
+
+//##############################################################################
+//######################## Simple Accessing Functions ##########################
 //##############################################################################
 
 // Getters for the config values to make them immutable to consumers of the 
 // module
 
+
+//******************************************************************************
+//* Function:    get_desired_host
+//*
+//* Description: This is a getter for the host address parsed out of config.zap.
+//               The backing value is module-private so other modules cannot
+//               mutate it after startup. This is only valid after
+//               establish_config has run.
+//******************************************************************************
 pub fn get_desired_host() []const u8 {
     return VALUE_DESIRED_HOST;
 }
 
+
+//******************************************************************************
+//* Function:    get_desired_port
+//*
+//* Description: This is a getter for the listen port parsed out of config.zap.
+//               Same reasoning as get_desired_host - consumers should not be
+//               able to change the configured port at runtime. This is only
+//               valid after establish_config has run.
+//******************************************************************************
 pub fn get_desired_port() u16 {
     return VALUE_DESIRED_PORT;
 }
 
+
+//##############################################################################
+//########################### Function Defintions ##############################
 //##############################################################################
 
+
+//******************************************************************************
+//* Function:    establish_config
+//*
+//* Description: This is the startup hook for configuration. It tries to open
+//               config.zap, and if that file is present it is parsed so the
+//               rest of the program can read host, port, and credentials.
+//
+//               If the file does not exist, a default is written instead so a
+//               first-time run still has something to bind with. Any other
+//               open error is treated as fatal and propagated to the caller.
+//******************************************************************************
 pub fn establish_config(io : std.Io, allocator : std.mem.Allocator) !void {
     if (std.Io.Dir.openFile(std.Io.Dir.cwd(), io, CONFIG_FILE_NAME, .{})) |file| {
         defer file.close(io);
@@ -50,6 +118,21 @@ pub fn establish_config(io : std.Io, allocator : std.mem.Allocator) !void {
     }
 }
 
+
+//******************************************************************************
+//* Function:    parse_file
+//*
+//* Description: This function walks config.zap line by line and fills the
+//               module's backing values. Lines are expected as
+//               "field = value". Host is copied into a static buffer, port is
+//               parsed as a u16, and each authorized-login line is split into
+//               username/password/timeout then appended onto
+//               auth.VALUE_USER_CREDENTIALS.
+//
+//               Credential strings have to be allocated here because we do not
+//               know how many users the file will declare, and those
+//               allocations live until freeAllocations at shutdown.
+//******************************************************************************
 fn parse_file(
     io : std.Io,
     allocator : std.mem.Allocator,
@@ -97,6 +180,17 @@ fn parse_file(
 }
 
 
+//******************************************************************************
+//* Function:    make_default_config
+//*
+//* Description: This function is used when config.zap is missing. It creates
+//               the file with a localhost host and port 3490 so the server
+//               can still start without a hand-written config.
+//
+//               It also seeds the in-memory host/port at the same time. That
+//               way a first-time run does not need a second parse pass just
+//               to pick up the defaults it just wrote.
+//******************************************************************************
 fn make_default_config(io : std.Io) !void {
     const new_file = try std.Io.Dir.createFile(
         std.Io.Dir.cwd(),

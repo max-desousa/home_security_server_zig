@@ -8,9 +8,13 @@ const SIZE_FOR_BUFFERS = 4096;
 
 
 //##############################################################################
-// Function: 
+// Function:    generic_poster
 //
-// Description: 
+// Description: This is the POST router. Targets under /archival/ are treated
+//              as video uploads and handed to archive_payload. /login is
+//              handed to login.manage_attempt. Anything else is logged and
+//              ignored so an unexpected POST does not get a half-handled
+//              write.
 //##############################################################################
 pub fn generic_poster(
     allocator : std.mem.Allocator,
@@ -34,9 +38,13 @@ pub fn generic_poster(
 
 
 //##############################################################################
-// Function: 
+// Function:    determine_if_video_upload
 //
-// Description: 
+// Description: This function returns true when the request target starts
+//              with /archival/. That prefix is how cameras (or the
+//              uploader) mark a clip that should be written under
+//              Archives/ rather than treated as a login or an unknown
+//              POST.
 //##############################################################################
 fn determine_if_video_upload(stream : *const ComplexStream) bool {
     return std.mem.startsWith(u8, stream.header_target, "/archival/");
@@ -44,9 +52,17 @@ fn determine_if_video_upload(stream : *const ComplexStream) bool {
 
 
 //##############################################################################
-// Function: 
+// Function:    archive_payload
 //
-// Description: 
+// Description: This is the full archival path for a camera upload. It
+//              derives an Archives/... path from the target, rejects with
+//              409 if that file already exists (so a client cannot
+//              clobber a clip it already sent), creates parent dirs,
+//              streams the POST body into the new file, then ACKs.
+//
+//              Several failure points are still @panic TODOs - this is
+//              the path that most needs a real error response once those
+//              are decided.
 //##############################################################################
 fn archive_payload(
     allocator : std.mem.Allocator,
@@ -117,9 +133,16 @@ fn archive_payload(
 
 
 //##############################################################################
-// Function: 
+// Function:    get_desired_path_for_archival
 //
-// Description: 
+// Description: This function strips /archival/ from the request target and
+//              prefixes Archives/ so the on-disk path matches the URL the
+//              camera posted to. The resulting path is allocated for the
+//              caller to free.
+//
+//              If the target does not contain that prefix (it should, if
+//              determine_if_video_upload already ran), this returns an
+//              error instead of inventing a path.
 //##############################################################################
 fn get_desired_path_for_archival(
     allocator : std.mem.Allocator,
@@ -139,9 +162,13 @@ fn get_desired_path_for_archival(
 
 
 //##############################################################################
-// Function: 
+// Function:    check_if_file_already_exists
 //
-// Description: 
+// Description: This is a statFile helper used before archival writes.
+//              FileNotFound means we are clear to create the clip. Any
+//              other stat result - including unexpected errors - is
+//              treated as "exists" so we do not clobber something we
+//              could not inspect.
 //##############################################################################
 fn check_if_file_already_exists(io : std.Io, path : []const u8) bool {
     const failable_stat = std.Io.Dir.statFile(.cwd(), io, path, .{ .follow_symlinks = false});
@@ -159,9 +186,13 @@ fn check_if_file_already_exists(io : std.Io, path : []const u8) bool {
 
 
 //##############################################################################
-// Function: 
+// Function:    ensure_directory_exists
 //
-// Description: 
+// Description: This function takes the full archive file path, drops the
+//              last segment (the filename), and createDirPathStatus so
+//              nested camera/date folders exist before the file is
+//              created. A path with no slash is treated as an error
+//              because that would mean we have nowhere to put the clip.
 //##############################################################################
 fn ensure_directory_exists(io : std.Io, archive_path : []const u8) !std.Io.Dir.CreatePathStatus {
     const nullable_cut = std.mem.cutLast(u8, archive_path, "/");
@@ -177,8 +208,13 @@ fn ensure_directory_exists(io : std.Io, archive_path : []const u8) !std.Io.Dir.C
 }
 
 
-//******************************************************************************
-//******************************************************************************
+//##############################################################################
+// Function:    temporary_print_contents
+//
+// Description: This is a debug helper that dumps the remaining POST body
+//              to stdout. It is not on the live routing path - leftover
+//              from when the body format was still being figured out.
+//##############################################################################
 fn temporary_print_contents(
     io : std.Io,
     allocator : std.mem.Allocator,
@@ -213,9 +249,16 @@ fn temporary_print_contents(
 }
 
 //******************************************************************************
-//* Function: parse_and_validate_creds
+//* Function:    parse_and_validate_creds
 //*
-//* Description: 
+//* Description: This is an older login-body parser that copies the POST
+//               body, splits the first line into username/password, and
+//               prints whether config.check_user_credential accepts the
+//               pair.
+//
+//               Login handling has since moved to login.zig
+//               (manage_attempt / extract_creds). This looks leftover and
+//               is not called from generic_poster.
 //******************************************************************************
 fn parse_and_validate_creds(
     allocator : std.mem.Allocator,

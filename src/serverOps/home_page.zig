@@ -3,9 +3,12 @@ const html = @import("html.zig");
 const ComplexStream = @import("complexStream");
 
 //******************************************************************************
-// Function:
-//
-// Description: 
+//* Function:    serve
+//*
+//* Description: This is a non-failing wrapper around
+//               failable_serve_home_page so GET routing can call a void
+//               function. Failures currently panic with a TODO rather than
+//               changing the caller's return type.
 //******************************************************************************
 pub fn serve(
     io : std.Io,
@@ -19,9 +22,16 @@ pub fn serve(
 
 
 //******************************************************************************
-// Function:
+//* Function:    failable_serve_home_page
+//*
+//* Description: This function prefers the checked-in static home page
+//               (static/HelloWorld.html) when that file is present. If it
+//               is missing, a temporary page is generated under
+//               .generated/, served, and then deleted.
 //
-// Description: 
+//               That fallback is how the home route stays usable even
+//               without the static file on disk. The generate step is still
+//               a stub, so the fallback path is not complete yet.
 //******************************************************************************
 fn failable_serve_home_page(
     io : std.Io,
@@ -47,9 +57,13 @@ fn failable_serve_home_page(
 
 
 //******************************************************************************
-// Function:
-//
-// Description: 
+//* Function:    generate_temporary_home_page
+//*
+//* Description: This is intended to write the fallback home HTML used when
+//               static/HelloWorld.html is not on disk. It is currently a
+//               no-op stub - io and allocator are discarded - so the
+//               generate-and-serve fallback in failable_serve_home_page
+//               cannot succeed until this is filled in.
 //******************************************************************************
 fn generate_temporary_home_page(
     io : std.Io,

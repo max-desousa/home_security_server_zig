@@ -12,6 +12,18 @@ const ConnectionEntry = struct {
     last_update : u64,
 };
 
+//******************************************************************************
+//* Function:    is_client_recognized_camera
+//*
+//* Description: This function checks the connection log to see if this
+//               stream's IP is already known as a camera. The idea is that
+//               once a camera has identified itself, later requests from
+//               that address can skip the human-login path.
+//
+//               Currently unused by the live routing path (the old call in
+//               stream_processing is commented out) but this is still the
+//               lookup against that log.
+//******************************************************************************
 pub fn is_client_recognized_camera(
     complexStream : *ComplexStream
 ) bool {
@@ -25,6 +37,14 @@ pub fn is_client_recognized_camera(
     return false;
 }
 
+//******************************************************************************
+//* Function:    send_client_to_login
+//*
+//* Description: This function sends a 303 redirect to /login with no body.
+//               connection_router uses this when authenticated_user_check
+//               fails, so the client is pointed at login instead of being
+//               left hanging on the resource they asked for.
+//******************************************************************************
 pub fn send_client_to_login(stream : *ComplexStream) !void {
     try stream.request.respond(
         "",
@@ -39,6 +59,18 @@ pub fn send_client_to_login(stream : *ComplexStream) !void {
 }
 
 
+//******************************************************************************
+//* Function:    stream_processing
+//*
+//* Description: This function is the method switch after a client has
+//               already passed the auth check. GET is handed to
+//               generic_getter, POST to generic_poster, and anything else is
+//               logged and dropped.
+//
+//               The point of keeping this here (instead of in the thread
+//               itself) is so the router thread stays a hand-off point and
+//               the HTTP verb routing lives with the rest of serverOps.
+//******************************************************************************
 pub fn stream_processing(
     io : std.Io,
     allocator : std.mem.Allocator,

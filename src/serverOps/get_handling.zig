@@ -20,9 +20,16 @@ const RequestType = enum {
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    classify_request_type
 //*
-//* Description: 
+//* Description: This function turns header_target into a RequestType so
+//               generic_getter can stay a thin switch. Order matters: home,
+//               static HTML, directory, player setup, calculated playlist,
+//               single-file playlist, then video file.
+//
+//               Returning null is deliberate. Unrecognized targets should
+//               not guess a handler - the getter sends no-content instead
+//               of leaving the client hanging or serving the wrong thing.
 //******************************************************************************
 fn classify_request_type(
     io : std.Io,
@@ -68,9 +75,15 @@ fn classify_request_type(
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    generic_getter
 //*
-//* Description: 
+//* Description: This is the GET router. It classifies the request, then
+//               dispatches to the home, static, directory, playlist, or
+//               video helpers. The rest of this function SHOULD stay
+//               redirects to more appropriate function calls.
+//
+//               Unknown types get an empty 204 so the client is not left
+//               spinning on a request we do not know how to serve.
 //******************************************************************************
 pub fn generic_getter(
     io : std.Io,
@@ -140,9 +153,16 @@ pub fn generic_getter(
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    request_is_for_favicon
 //*
-//* Description: 
+//* Description: This function returns true when the last path segment of
+//               the request is favicon.ico. It is present for routing so
+//               browsers hammering the icon do not get treated as a real
+//               file or directory request.
+//
+//               Currently unused by classify_request_type - the getter
+//               still falls through to no-content for favicon if nothing
+//               else matches.
 //******************************************************************************
 fn request_is_for_favicon(stream : *ComplexStream) bool {
     _, const target = std.mem.cutLast(u8, stream.header_target, "/") orelse return false;
@@ -151,9 +171,12 @@ fn request_is_for_favicon(stream : *ComplexStream) bool {
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    is_playlist_request
 //*
-//* Description: 
+//* Description: This is a heuristic for a calculated (time-range) playlist
+//               URL. The last path segment has to contain both "start" and
+//               "end" - that is the form the player uses when asking for a
+//               window of archive clips rather than a single file.
 //******************************************************************************
 fn is_playlist_request(stream : *ComplexStream) bool {
     _, const potentential_playlist = std.mem.cutLast(u8, stream.header_target, "/") orelse return false;
@@ -167,9 +190,12 @@ fn is_playlist_request(stream : *ComplexStream) bool {
 
 
 //******************************************************************************
-//* Function: 
-//* 
-//* Description: 
+//* Function:    is_video_file_request
+//*
+//* Description: This function checks whether the request target ends in a
+//               known video extension (.ts, .mov, .mp4, .avi, .mpeg). Those
+//               GET targets should be served as video rather than as a
+//               directory listing or a static HTML page.
 //******************************************************************************
 fn is_video_file_request(stream : *ComplexStream) bool {
     const video_file_extensions = [_][]const u8{
@@ -218,9 +244,16 @@ fn generate_and_serve_playlist(
 }
 
 //******************************************************************************
-//* Function: 
-//* 
-//* Description: 
+//* Function:    failable_generate_and_serve_playlist
+//*
+//* Description: This is the real playlist path behind the non-failing
+//               wrapper. It strips the request to a directory, writes a
+//               temporary .playlist.m3u8, fills that file through sysOps,
+//               serves it as HLS, then deletes the temp file.
+//
+//               Errors bubble to generate_and_serve_playlist, which shows
+//               send_error_state so the client is not left hanging if
+//               playlist generation fails.
 //******************************************************************************
 fn failable_generate_and_serve_playlist(
     io : std.Io,

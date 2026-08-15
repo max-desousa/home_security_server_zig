@@ -4,6 +4,18 @@ const sysOps = @import("sysOps");
 
 const HTML_FILE_TO_SERVE = ".html_to_serve.html";
 
+//******************************************************************************
+//* Function:    serve_file
+//*
+//* Description: This function opens sub_path from the cwd and streams the
+//               whole file into a streaming HTTP response. It is the older
+//               / simpler serve path.
+//
+//               Newer call sites prefer serve_file_from_path / serve_file_2
+//               so they can set Content-Type and share the same error
+//               handling. This is still used by the home-page path, which
+//               already knows the file it wants.
+//******************************************************************************
 pub fn serve_file(
     io : std.Io,
     stream : *ComplexStream,
@@ -24,9 +36,16 @@ pub fn serve_file(
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    generate_and_serve_directory_html
 //*
-//* Description: 
+//* Description: This function creates a locked temporary HTML file, asks
+//               sysOps.generate_html_for_folder to fill it with the
+//               directory-browser view, serves that file, then deletes the
+//               temp. The exclusive lock is there so two overlapping
+//               directory requests do not stomp the same backing file.
+//
+//               Any failure to lock or generate becomes send_error_state
+//               instead of crashing the thread.
 //******************************************************************************
 pub fn generate_and_serve_directory_html(
     io : std.Io,
@@ -61,9 +80,15 @@ pub fn generate_and_serve_directory_html(
 
 
 //******************************************************************************
-//* Function: 
-//* 
-//* Description: 
+//* Function:    serve_file_from_path
+//*
+//* Description: This function opens a path (skipping the leading '/' so it
+//               is cwd-relative) and forwards the file to serve_file_2 with
+//               the caller-supplied Content-Type. Open failure is reported
+//               to the client as an error page rather than bubbling out.
+//
+//               This is the convenient entry for GET routing when the
+//               target is already known (home, player.html, video files).
 //******************************************************************************
 pub fn serve_file_from_path(
     io : std.Io,
@@ -80,9 +105,16 @@ pub fn serve_file_from_path(
 }
 
 //******************************************************************************
-//* Function:    
+//* Function:    serve_file_2
 //*
-//* Description: 
+//* Description: This is the shared send path. It builds a streaming
+//               response with the given Content-Type and copies the file in
+//               fill/toss chunks. Directory listings, playlists, and
+//               static/video GETs all eventually hit this function.
+//
+//               The chunked copy is intentional - some of these files can
+//               be large video clips, and we do not want to require the
+//               whole file in memory before the first byte goes out.
 //******************************************************************************
 pub fn serve_file_2(
     io : std.Io,
@@ -144,9 +176,16 @@ pub fn serve_file_2(
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    send_error_state
 //*
-//* Description: 
+//* Description: This is the last-resort HTML error page so the browser is
+//               not left spinning when something in serving or generation
+//               fails. The status string is interpolated into a small
+//               "Server has entered error state" document.
+//
+//               Wrappers that catch errors (playlist generation, directory
+//               HTML, file open) call this instead of returning a bare
+//               status with no body.
 //******************************************************************************
 pub fn send_error_state(stream : *ComplexStream, status : []const u8) void {
     var backing_buffer_for_response : [1024]u8 = undefined;

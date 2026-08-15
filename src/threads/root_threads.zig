@@ -1,3 +1,12 @@
+//! This module contains all entry points for threads being triggered by main.
+//!
+//! Its intention is to keep main while still having an organized point to
+//! inspect all top level functions are happening. This grouping can be
+//! convenient for managing io cancellation instead of searching through all
+//! more nuanced modules. 
+//!
+//! This module is mostly a design decision for a method of trying to keep
+//! things clean - it may not be everyone's favorite.
 const std = @import("std");
 const config = @import("config");
 const serverOps = @import("serverOps");
@@ -26,6 +35,14 @@ pub const Server = struct {
     addr : std.Io.net.IpAddress,
     io : std.Io,
 
+    //##########################################################################
+    // Function:    init
+    //
+    // Description: This is the constructor for the local Server struct. It
+    //              pulls host/port from the already-parsed config and turns
+    //              that into an IPv4 address the rest of the thread can bind
+    //              with. Fails if the configured address is not valid IPv4.
+    //##########################################################################
     pub fn init(io : std.Io) !Server {
         const host: []const u8 = config.get_desired_host();
         const port: u16 = config.get_desired_port();
@@ -34,6 +51,14 @@ pub const Server = struct {
         return .{ .host = host, .port = port, .addr = addr, .io = io };
     }
 
+    //##########################################################################
+    // Function:    listen
+    //
+    // Description: This function is the actual bind. init only prepares the
+    //              address; listen prints that address and starts a TCP
+    //              stream listener on it so accept can start handing
+    //              connections off to the router threads.
+    //##########################################################################
     pub fn listen(self: Server) !std.Io.net.Server {
         std.debug.print("Server Addr: {s}:{any}\n", .{self.host, self.port});
         return try self.addr.listen(
@@ -75,11 +100,17 @@ fn induce_thread_cancellation() void {
 
 
 //##############################################################################
-// Function: accept
+// Function:    accept
 //
 // Description: Thread that establishes a server, listens for incoming
 //              connections, and redirects connection attempts to other threads
 //              to optimize concurrency/speed in addressing multiple connections
+//
+//              The primary directive of this thread is to be the single source
+//              of accepting connections, and then handing them off to other
+//              threads so other connections can be evalutated on other
+//              threads. This should help make the server be as responsive as
+//              possbile and limit potential blocking of connections.
 //##############################################################################
 pub fn accept(
     io : std.Io, 
@@ -123,7 +154,7 @@ pub fn accept(
 
 
 //##############################################################################
-// Function: connection_router
+// Function:    connection_router
 //
 // Description: This function is dispersed on as many threads as possible and
 //              is the first point of addressing the actual requests received
@@ -186,4 +217,3 @@ pub fn connection_router(
         }
     }
 }
-

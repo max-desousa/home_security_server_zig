@@ -35,12 +35,16 @@ pub fn manage_attempt(
 
 
 //******************************************************************************
-//* Function:    manage_attempt
+//* Function:    manage_attempt_failable
 //*
-//* Description: This is a function for managing all necessary steps to parse
-//               and proceed with a login attempt.
-//               It mostly serves as a one-shot that can be called by the
-//               generic post logic. 
+//* Description: This is the inner implementation of manage_attempt. It parses
+//               credentials from the POST body, checks them against auth,
+//               issues a new cookie, then redirects the client home.
+//
+//               It is split out from the wrapper so this path can use `try`
+//               without forcing generic_poster to handle an error union.
+//               Failures bubble to manage_attempt, which currently panics
+//               with a TODO.
 //******************************************************************************
 fn manage_attempt_failable(
     io : std.Io,
@@ -75,6 +79,19 @@ fn manage_attempt_failable(
 }
 
 
+//******************************************************************************
+//* Function:    parse_request
+//*
+//* Description: This function reads the login POST body line-by-line onto
+//               the heap so the stream contents can be inspected more than
+//               once. After the body is fully copied, extract_creds pulls
+//               the username/password pair out of that list.
+//
+//               The extra copy is more of an insurance method than anything
+//               else - particularly in case the stream cannot be rewound.
+//               Fails if the stream has no content-length or the body
+//               cannot be filled as expected.
+//******************************************************************************
 fn parse_request(
     allocator : std.mem.Allocator,
     stream : *ComplexStream,
@@ -199,14 +216,32 @@ fn update_user_cookie(
 }
 
 
+//******************************************************************************
+//* Function:    redirect_to_login
+//*
+//* Description: This is intended as a public helper for sending a client to
+//               the login page. It is currently an unimplemented stub.
+//
+//               The live redirect used by connection_router is
+//               general.send_client_to_login. This name is left in place so
+//               a login-module version can be filled in without chasing
+//               call sites later.
+//******************************************************************************
 pub fn redirect_to_login() void {
 }
 
 
 //******************************************************************************
-//* Function:    
+//* Function:    send_redirect_to_home
 //*
-//* Description: 
+//* Description: This function is what actually lands a new session cookie on
+//               the client after a successful login. It responds 303 to /
+//               and sets session= with HttpOnly, SameSite=Strict, and a
+//               short Max-Age.
+//
+//               The cookie string itself is generated earlier by
+//               update_user_cookie; this function only formats the header
+//               and sends the redirect.
 //******************************************************************************
 fn send_redirect_to_home(
     stream : *ComplexStream,
