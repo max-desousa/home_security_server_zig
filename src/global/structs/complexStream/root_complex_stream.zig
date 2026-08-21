@@ -4,8 +4,29 @@ const Self = @This();
 
 const BUFFER_SIZE_FOR_HEADER_FIELDS = 512;
 
-// Underlying (backing) stream
+//##############################################################################
+//######################### Fields and Descriptions ############################
+//##############################################################################
+
+//----------------------- Begin must provide fields...--------------------------
+
+// Underlying (backing) stream. This is used primarly just for securing the
+// readers/writers, but its use afterwards it mostly non-existent. Not sure if
+// it could be deleted... leaving for now.
 stream : std.Io.net.Stream,
+
+// In order to interact with the stream, there need to be readers and writers.
+// These are provided with the creation of the struct to make sure the
+// lifetimes of the buffers match the lifetime of the parent.
+backing_buffer_for_raw_stream_writer : []u8,
+backing_buffer_for_raw_stream_reader : []u8,
+
+
+//---------------------- Begin Infrastructure fields... ------------------------
+
+// What do we mean by infrastructure fields - fields that are likely not
+// interacted with for any reason. They are not private due to the language -
+// but the general expectation is that these would not be interacted with.
 
 // Necessary elements for zig's server parsing - sever needs a reader and writer
 // zig's library to help with http parsing needs the std.Io.net.Stream's reader
@@ -13,31 +34,66 @@ stream : std.Io.net.Stream,
 // be touched... they are BACKING writers... hidden under a few layers writing 
 // the raw bitstreams... not the ease of access in handling http compliance...
 // that's another set of readers/writers. 
-backing_buffer_for_raw_stream_writer : []u8,
-backing_buffer_for_raw_stream_reader : []u8,
 raw_stream_reader : std.Io.net.Stream.Reader = undefined,
 raw_stream_writer : std.Io.net.Stream.Writer = undefined,
 
-// The "server" object that we'll reference when parsing the body etc (backed by the stream)
+// The "server" object that we'll reference when parsing the body etc (backed by the stream readers and writers)
 server : std.http.Server = undefined,
+// A convenient way - for now of caching data related to the initial stream.
+// Most of the useful information is duplicated in subsequent fields for
+// cleaner accessing.
 request : std.http.Server.Request = undefined,
+
+
+//------------------------- Begin Useable fields... ----------------------------
+
+// Usable meaning public (essentially)
 
 // Fields to cache all necessary header information necessary
 // (The state of reading the headers seems transient - so we have greater success
 // parsing everything immediately)
+
+// This is the mechanism to store the requested target in the stream. This will
+// be a direct copy
 backing_buffer_for_target : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([BUFFER_SIZE_FOR_HEADER_FIELDS]u8),
 header_target : []u8 = undefined,
-header_method : ?std.http.Method = null,
 
-content_length : ?u64 = null,
-
-backing_buffer_for_cookie : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = undefined,
-cookie_token : ?[]u8 = null,
-backing_buffer_for_camera_hash : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = undefined,
-camera_hash : ?[]u8 = null,
-
+// This effectively conveys the same information has header_target and it's
+// backing buffer but is offered as a conveninece field. Much of this
+// application - currently assumes serving a local file system or directory.
+// This modifies the string from header target so this string can be treated as
+// a file path that works with the stdlib.
 backing_buffer_for_fs_adjusted_target : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = std.mem.zeroes([BUFFER_SIZE_FOR_HEADER_FIELDS]u8),
 fs_adjusted_target : []u8 = undefined,
+
+// At the start of development we had some funky behavior (probably user error)
+// in referring to the request field. It wasn't clear if that value was lost as
+// the stream was being passed to different functions. This field was created
+// to store the most valuable field in stream - the method - for functions to
+// reference
+header_method : ?std.http.Method = null,
+
+// Self explanatory - this is for the user to populate
+content_length : ?u64 = null,
+
+//--------------------------- Begin Header Fields ------------------------------
+
+// What are these fields? This was another aspect related to the uncertainty of
+// behavior of the request field. It did not seem possible to iterate over
+// headers and what not after the stream started getting processed - which
+// could easily make sense. These fields are backing buffers and slices for
+// storing strings of pertinent headers that are being scanned when a stream is
+// incoming. That way they are persistent for the lifetime of the parent
+
+// Cookies - self explanatory
+backing_buffer_for_cookie : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = undefined,
+cookie_token : ?[]u8 = null,
+
+// Camera hash. This is a field for a concept - still in theory - where if the
+// client is a camera supplying footage, a hash could be provided - much like a
+// cookie to allow posts and bypass auth
+backing_buffer_for_camera_hash : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = undefined,
+camera_hash : ?[]u8 = null,
 
 
 //------------------------------ BEGIN METHODS ---------------------------------
