@@ -3,6 +3,7 @@ const config = @import("config");
 const options = @import("options");
 const threads = @import("threads");
 const auth = @import("auth");
+const sysOps = @import("sysOps");
 
 
 //Global const's
@@ -45,6 +46,15 @@ pub fn main() !void {
 
     // get io instance.
     const io = threaded.io();
+
+    //**************************************************************************
+    // Run code that sets the system (actual computer) settings
+    //**************************************************************************
+
+    try sysOps.setup.execute(io, allocator);
+    defer {
+        sysOps.setup.revert(io, allocator) catch {};
+    }
 
     //**************************************************************************
     // END BOILER PLATE

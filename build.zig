@@ -80,6 +80,7 @@ pub fn build(b: *std.Build) !void {
                 .{ .name = "serverOps", .module = mod_server_ops },
                 .{ .name = "threads", .module = mod_threads },
                 .{ .name = "auth", .module = mod_auth },
+                .{ .name = "sysOps", .module = mod_system_ops },
             },
         }),
     });
