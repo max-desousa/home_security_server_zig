@@ -9,6 +9,7 @@ const ComplexStream = @import("complexStream");
 const respond = @import("respond.zig");
 const playlist = @import("playlist.zig");
 const directory = @import("directory.zig");
+const settings_dispatcher = @import("dispatch_settings.zig").dispatch_settings_request;
 
 
 //Enum for routing table
@@ -20,6 +21,7 @@ const RequestType = enum {
     Playlist_StreamCalculated,
     Playlist_StreamSingleFile,
     Static,
+    Settings,
 };
 
 
@@ -41,6 +43,9 @@ fn classify_request_type(
 ) ?RequestType {
     //Is the request a home page?
     if (std.mem.eql(u8, stream.header_target, "/")) return .Home;
+
+    // Is this request - in any way - related to settings?
+    if (std.mem.startsWith(u8, stream.header_target, "/settings")) return .Settings;
 
     //Checking if the request is a static html file:
     var path_buffer : [1024]u8 = undefined;
@@ -113,6 +118,9 @@ pub fn generic_getter(
                 "/static/HelloWorld.html",
                 "text/html; charset=utf-8",
             );
+        },
+        .Settings => {
+            settings_dispatcher(io, stream);
         },
         .Directory => directory.generate_and_serve_directory_html(io, allocator, stream),
         .Playlist_PlayerSetup => {
