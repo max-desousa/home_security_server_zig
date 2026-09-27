@@ -85,7 +85,6 @@ pub fn build(b: *std.Build) !void {
     });
 
     exe.root_module.addOptions("options", options);
-    exe.root_module.link_libc = true;
 
     b.installArtifact(exe);
 

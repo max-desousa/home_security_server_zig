@@ -52,7 +52,7 @@ pub fn main() !void {
 
 
     // Set up SIGINT handler for graceful closing
-    var action : std.c.Sigaction = .{
+    var action : std.posix.Sigaction = .{
         .handler = .{ .handler = threads.ctrl_c_override },
         .mask = std.posix.sigemptyset(),
         .flags = 0,
