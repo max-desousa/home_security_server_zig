@@ -89,12 +89,6 @@ content_length : ?u64 = null,
 backing_buffer_for_cookie : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = undefined,
 cookie_token : ?[]u8 = null,
 
-// Camera hash. This is a field for a concept - still in theory - where if the
-// client is a camera supplying footage, a hash could be provided - much like a
-// cookie to allow posts and bypass auth
-backing_buffer_for_camera_hash : [BUFFER_SIZE_FOR_HEADER_FIELDS]u8 = undefined,
-camera_hash : ?[]u8 = null,
-
 
 //------------------------------ BEGIN METHODS ---------------------------------
 
@@ -208,11 +202,6 @@ fn cache_headers(self : *Self) !void {
             const len = working_slice_for_cookie.len;
             @memcpy(self.backing_buffer_for_cookie[0..len], working_slice_for_cookie);
             self.cookie_token = self.backing_buffer_for_cookie[0..len];
-        }
-        if (std.mem.eql(u8, entry.name , "Camera-Hash")) {
-            const len = entry.value.len;
-            @memcpy(self.backing_buffer_for_camera_hash[0..len], entry.value);
-            self.camera_hash = self.backing_buffer_for_camera_hash[0..len];
         }
     }
 }

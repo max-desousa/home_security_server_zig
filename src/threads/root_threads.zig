@@ -198,17 +198,30 @@ pub fn connection_router(
                 continue;
             };
 
-            const continue_interaction = serverOps.authenticated_user_check(io, &complex_stream);
+            const interaction_type = serverOps.authenticated_user_check(io, &complex_stream);
             
-            if (continue_interaction) {
-                std.log.debug("Should continue connection - valid client", .{});
-                serverOps.stream_processing(io, allocator, &complex_stream);
-            }
-            else {
-                std.log.debug("Should not continue request - invalid client (send to login)", .{});
-                serverOps.send_client_to_login(&complex_stream) catch {
-                    @panic("TODO: how do I want to handle failing to redirect?");
-                };
+            switch (interaction_type) {
+                .HumanClientLoginReq, .TimedOutUser, .InvalidCookie => {
+                    std.log.debug("Should send this connection type to login. New or timed out human user", .{});
+                    serverOps.send_client_to_login(&complex_stream) catch {
+                        @panic("TODO: how do I want to handle failing to redirect?");
+                    };
+                },
+                .PotentialCameraBeginningHandshake => {
+                    std.log.debug("Camera attempting to start handshake to upload", .{});
+                    serverOps.special_camera_upload(io, allocator, &complex_stream) catch |err| {
+                        std.log.err("Error in camera handshake process: {any}", .{err});
+                    };
+                },
+                .CachedUser => {
+                    std.log.debug("Should continue connection - valid client", .{});
+                    serverOps.stream_processing(io, allocator, &complex_stream);
+                },
+                .InvalidConnectionAttempt, .InvalidCookieDataInDatabase => unreachable,
+                //TODO: I don't love handling of InvalidCookieDataInDatabase.
+                //This should be recoverable, but we're moving forward and just
+                //putting a crash in the case that this happens for the time
+                //being.
             }
         }
         else |_| {

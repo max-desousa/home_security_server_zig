@@ -10,6 +10,16 @@ const ComplexStream = @import("complexStream");
 const auth = @import("auth");
 const login = @import("login.zig");
 
+pub const ConnectionType = enum {
+    HumanClientLoginReq,
+    PotentialCameraBeginningHandshake,
+    CachedUser,
+    TimedOutUser,
+    InvalidConnectionAttempt,
+    InvalidCookie,
+    InvalidCookieDataInDatabase,
+};
+
 //******************************************************************************
 //* Function:    authenticated_user_check
 //*
@@ -28,22 +38,22 @@ const login = @import("login.zig");
 pub fn authenticated_user_check(
     io : std.Io,
     stream : *ComplexStream,
-) bool {
+) ConnectionType {
     if (login.is_login_request(stream)) {
-        return true;
+        return .HumanClientLoginReq;
     }
-    else if (stream.camera_hash) |_| {
-        return true;
+    else if (is_camera_handshake_starter(stream)) {
+        return .PotentialCameraBeginningHandshake;
     }
     else if (stream.cookie_token) |token| {
         std.log.debug("Evaluating cookie: {s}", .{ token });
-        if (!auth.is_valid_cookie(token)) return false;
+        if (!auth.is_valid_cookie(token)) return .InvalidCookie;
 
         std.log.debug("Cookie ({s}) was found in arraylist as a valid token", .{ token});
 
         //if for some reason the expiry time is not present (it should be)
         //eject early
-        const expiry_time_for_cookie = auth.cookie_expiry_time(token) orelse return false;
+        const expiry_time_for_cookie = auth.cookie_expiry_time(token) orelse return .InvalidCookieDataInDatabase;
 
         //Getting current time to check against our saved cookie data
         const timestamp_now = std.Io.Timestamp.now(io, .real);
@@ -51,14 +61,19 @@ pub fn authenticated_user_check(
 
         //Is the current time greater than the expiry time for the cookie?
         if (now_seconds >= expiry_time_for_cookie) {
-            return false;
+            return .TimedOutUser;
         }
 
         //No checks that would invalidate the requests present cookie... return
         //true to indicate server can keep proceeding.
-        return true;
+        return .CachedUser;
     }
     else {
-        return false;
+        return .InvalidConnectionAttempt;
     }
+}
+
+
+fn is_camera_handshake_starter(stream : *const ComplexStream) bool {
+    return std.mem.eql(u8, stream.header_target, "/bch");
 }

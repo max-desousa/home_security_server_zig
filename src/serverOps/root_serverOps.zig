@@ -11,3 +11,4 @@
 pub const authenticated_user_check = @import("request_gate.zig").authenticated_user_check;
 pub const stream_processing = @import("dispatch.zig").stream_processing;
 pub const send_client_to_login = @import("login.zig").send_client_to_login;
+pub const special_camera_upload = @import("specialized_cam_upload.zig").special_camera_upload;
