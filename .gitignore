@@ -1,5 +1,6 @@
 .zig-cache/**
 /zig-out/**
+certs/**/*
 output.txt
 error.txt
 config.zap

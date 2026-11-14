@@ -1,0 +1,18 @@
+# Listen on HTTPS (adjust hostname/port as needed)
+:8674 {
+	# Use your server certificate and key
+	tls ./certs/node.crt ./certs/node.key {
+		client_auth {
+			mode require_and_verify
+			trust_pool file ./certs/ca.crt
+		}
+	}
+
+	# Proxy decrypted HTTP to your Zig app
+	reverse_proxy 127.0.0.1:8675 {
+		# Forward identity from the verified client certificate
+		header_up X-Client-CN {http.request.tls.client.subject.common_name}
+		header_up X-Client-Fingerprint {http.request.tls.client.fingerprint}
+		header_up X-Client-Subject {http.request.tls.client.subject}
+	}
+}

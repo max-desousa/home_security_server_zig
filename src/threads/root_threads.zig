@@ -201,7 +201,7 @@ pub fn connection_router(
             const interaction_type = serverOps.authenticated_user_check(io, &complex_stream);
             
             switch (interaction_type) {
-                .HumanClientLoginReq, .TimedOutUser, .InvalidCookie => {
+                .TimedOutUser, .InvalidCookie => {
                     std.log.debug("Should send this connection type to login. New or timed out human user", .{});
                     serverOps.send_client_to_login(&complex_stream) catch {
                         @panic("TODO: how do I want to handle failing to redirect?");
@@ -213,7 +213,7 @@ pub fn connection_router(
                         std.log.err("Error in camera handshake process: {any}", .{err});
                     };
                 },
-                .CachedUser => {
+                .CachedUser, .HumanClientLoginReq => {
                     std.log.debug("Should continue connection - valid client", .{});
                     serverOps.stream_processing(io, allocator, &complex_stream);
                 },
