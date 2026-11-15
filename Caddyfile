@@ -1,3 +1,8 @@
+# Custom certs on a high port. Do not open :80 for HTTP→HTTPS redirects.
+{
+	auto_https disable_redirects
+}
+
 # Listen on HTTPS (adjust hostname/port as needed)
 :8674 {
 	# Use your server certificate and key

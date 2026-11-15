@@ -8,3 +8,4 @@ config.zap
 **/*.ts
 **/Archives/**/*
 .html_to_serve.html
+caddy/**/*

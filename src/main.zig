@@ -64,7 +64,19 @@ pub fn main() !void {
     defer auth.freeAllocations(allocator);
     std.log.info("Desired Host from config: {s}", .{ config.get_desired_host() });
 
-    //Create a server object - done here to simplify error union
+    var child = try std.process.spawn(
+        io, 
+        .{
+            .stdin = .ignore,
+            .stdout = .ignore,
+            .stderr = .ignore,
+            .argv = &.{
+                "caddy",
+                "run",
+            },
+        });
+    defer child.kill(io);
+    const pid = child.id orelse return error.CaddyExited;
 
     //Create array list of to hold all threads that need to be closed
     //TODO: This array list should be all threads - but I've not developed the thread 
@@ -96,5 +108,16 @@ pub fn main() !void {
 
     //empty loop to wait for Ctrl+C thanks to sig override.
     while (threads.Running.load(.seq_cst)) {
+        var status : i32 = undefined;
+        const rc = std.posix.system.waitpid(pid, &status, std.os.linux.W.NOHANG);
+        switch (std.posix.errno(rc)) {
+            .SUCCESS => if (rc != 0) {
+                child.id = null;
+                if (!threads.Running.load(.seq_cst)) break;
+                return error.CaddyExited;
+            },
+            .INTR => {},
+            else => return error.CaddyExited,
+        }
     }
 }
